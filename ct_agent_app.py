@@ -1,5 +1,8 @@
+
 import streamlit as st
 import os
+import logging
+logging.getLogger("langchain_google_genai._function_utils").setLevel(logging.ERROR)
 from dotenv import load_dotenv
 
 # LangChain Imports
