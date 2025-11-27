@@ -30,6 +30,8 @@ amazon_session.json
 agent_data.db
 *.db
 *.db-journal
+ct_gov_local_db/
+ct_gov_gemini_db/
 
 # Chrome/Browser session data
 user_session/
