@@ -30,7 +30,7 @@ if not os.getenv("GOOGLE_API_KEY"):
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
 
 # Embeddings for Searching (Must match ingestion)
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+embeddings = HuggingFaceEmbeddings(model_name="pritamdeka/S-PubMedBert-MS-MARCO")
 
 # 2. Load Vector DB
 persist_dir = "./ct_gov_local_db" # Make sure this matches the new folder name

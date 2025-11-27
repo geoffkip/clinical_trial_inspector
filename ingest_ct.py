@@ -10,9 +10,9 @@ from langchain_core.documents import Document
 
 load_dotenv()
 
-def fetch_trials(years=5, max_studies=100):
+def fetch_trials(years=5, max_studies=10000):
     """
-    Fetches clinical trials from the last 'years' years.
+    Fetches clinical trials from the last 'years' years using pagination.
     """
     base_url = "https://clinicaltrials.gov/api/v2/studies"
     
@@ -20,21 +20,44 @@ def fetch_trials(years=5, max_studies=100):
     print(f"📡 Connecting to CT.gov API...")
     print(f"🔎 Fetching trials starting after: {start_date}")
 
-    params = {
-        "query.term": f"AREA[StartDate]RANGE[{start_date},MAX]",
-        "pageSize": max_studies,
-        "fields": "protocolSection.identificationModule.nctId,protocolSection.identificationModule.briefTitle,protocolSection.eligibilityModule.eligibilityCriteria,protocolSection.designModule.phases,protocolSection.statusModule.startDateStruct,protocolSection.identificationModule.organization"
-    }
+    all_studies = []
+    next_page_token = None
     
-    response = requests.get(base_url, params=params)
-    if response.status_code == 200:
-        return response.json().get('studies', [])
-    else:
-        print(f"❌ API Error: {response.status_code}")
-        return []
+    while len(all_studies) < max_studies:
+        params = {
+            "query.term": f"AREA[StartDate]RANGE[{start_date},MAX]",
+            "pageSize": min(1000, max_studies - len(all_studies)), # Adjust page size to not over-fetch
+            "fields": "protocolSection.identificationModule.nctId,protocolSection.identificationModule.briefTitle,protocolSection.eligibilityModule.eligibilityCriteria,protocolSection.designModule.phases,protocolSection.statusModule.startDateStruct,protocolSection.identificationModule.organization"
+        }
+        
+        if next_page_token:
+            params["pageToken"] = next_page_token
+
+        try:
+            response = requests.get(base_url, params=params)
+            if response.status_code == 200:
+                data = response.json()
+                studies = data.get('studies', [])
+                all_studies.extend(studies)
+                
+                next_page_token = data.get('nextPageToken')
+                print(f"   Fetched {len(studies)} studies. Total: {len(all_studies)}")
+                
+                if not next_page_token:
+                    print("   No more pages available.")
+                    break
+            else:
+                print(f"❌ API Error: {response.status_code}")
+                break
+        except Exception as e:
+            print(f"❌ Request Error: {e}")
+            break
+            
+    return all_studies[:max_studies]
 
 def run_ingestion():
-    studies = fetch_trials(years=5, max_studies=100)
+    # Set a higher default limit or let user configure it
+    studies = fetch_trials(years=5, max_studies=10000) 
     
     if not studies:
         print("No studies found.")
@@ -76,16 +99,17 @@ def run_ingestion():
             continue
 
     # --- THE FIX: USE LOCAL EMBEDDINGS ---
-    print("🧠 Initializing Local Embeddings (HuggingFace)...")
-    print("(This involves a one-time download of ~80MB)")
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    print("🧠 Initializing Local Embeddings (PubMedBERT)...")
+    print("(This involves a one-time download)")
+    # Using a model better suited for clinical text
+    embeddings = HuggingFaceEmbeddings(model_name="pritamdeka/S-PubMedBert-MS-MARCO")
     
     print("🚀 Ingesting into ChromaDB...")
     # Since this is local, we don't need batching or sleep timers!
     vectorstore = Chroma.from_documents(
         documents=documents, 
         embedding=embeddings, 
-        persist_directory="./ct_gov_local_db" # Saving to a new folder name to avoid conflicts
+        persist_directory="./ct_gov_local_db" 
     )
     print(f"✅ Success! Database created at ./ct_gov_local_db with {len(documents)} trials.")
 
