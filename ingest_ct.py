@@ -102,10 +102,10 @@ def fetch_trials_generator(years=5, max_studies=1000, status=None, phases=None):
 
 def run_ingestion():
     parser = argparse.ArgumentParser(description="Ingest Clinical Trials data.")
-    parser.add_argument("--limit", type=int, default=2000, help="Number of studies to ingest. Set to -1 for ALL.")
-    parser.add_argument("--years", type=int, default=5, help="Number of years to look back.")
+    parser.add_argument("--limit", type=int, default=-1, help="Number of studies to ingest. Set to -1 for ALL.")
+    parser.add_argument("--years", type=int, default=10, help="Number of years to look back.")
     parser.add_argument("--status", type=str, default="COMPLETED", help="Comma-separated list of statuses (e.g., COMPLETED,RECRUITING).")
-    parser.add_argument("--phases", type=str, default="PHASE2,PHASE3", help="Comma-separated list of phases (e.g., PHASE2,PHASE3).")
+    parser.add_argument("--phases", type=str, default="PHASE1,PHASE2,PHASE3,PHASE4", help="Comma-separated list of phases (e.g., PHASE2,PHASE3).")
     args = parser.parse_args()
 
     status_list = args.status.split(',') if args.status else []
