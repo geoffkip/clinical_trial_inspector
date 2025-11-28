@@ -2,23 +2,28 @@
 
 **Clinical Trial Detective** is an intelligent AI agent designed to help researchers, clinicians, and curious minds explore and analyze clinical trial data from [ClinicalTrials.gov](https://clinicaltrials.gov/).
 
-Built with **LangChain**, **Streamlit**, and **Google Gemini**, this tool allows you to search for studies using natural language, filter by specific criteria, and get synthesized insights.
+Built with **LangChain**, **LlamaIndex**, **Streamlit**, and **Google Gemini**, this tool allows you to search for studies using natural language, filter by specific criteria, visualize trends, and get synthesized insights.
 
 ## ✨ Features
 
 - **Natural Language Search**: Ask questions like "Find Phase 3 Pfizer studies for diabetes started after 2022" instead of using complex search forms.
-- **Smart Filtering**: The agent automatically extracts filters (Year, Phase, Sponsor) from your query to narrow down results.
-- **Local Vector Store**: Uses **ChromaDB** with **HuggingFace embeddings** (`all-MiniLM-L6-v2`) for fast, private, and cost-effective semantic search.
+- **Advanced RAG Pipeline**: Powered by **LlamaIndex** for robust document indexing and retrieval.
+- **Smart Filtering**: The agent automatically extracts filters (Year, Phase, Sponsor, Status, Study Type) from your query to narrow down results.
+- **Interactive Sidebar**: Manually refine your search with sidebar filters for precise control.
+- **Analytics Dashboard**: Visualize search results with charts for **Phase Distribution**, **Top Sponsors**, and **Yearly Trends**.
+- **Data Export**: Download your search results as a CSV file for further analysis.
+- **Comprehensive Data**: Ingests detailed study information including **Summaries**, **Outcomes**, **Eligibility Criteria**, **Conditions**, **Locations**, and **Study Population**.
+- **Local Vector Store**: Uses **ChromaDB** with **PubMedBERT** embeddings (`pritamdeka/S-PubMedBert-MS-MARCO`) for clinical-specific semantic search.
 - **AI Synthesis**: Powered by **Google Gemini (gemini-2.5-flash)** to summarize findings, compare studies, and answer follow-up questions.
-- **Real-time Data Ingestion**: Fetch the latest trials directly from the ClinicalTrials.gov API.
 
 ## 🛠️ Tech Stack
 
 - **Frontend**: Streamlit
 - **LLM**: Google Gemini (`gemini-2.5-flash`)
-- **Orchestration**: LangChain (Agents, Self-Query Retriever)
+- **Orchestration**: LangChain (Agents, Tool Calling)
+- **Retrieval (RAG)**: LlamaIndex (VectorStoreIndex, QueryEngine)
 - **Vector Database**: ChromaDB (Local)
-- **Embeddings**: HuggingFace (`all-MiniLM-L6-v2`)
+- **Embeddings**: HuggingFace (`pritamdeka/S-PubMedBert-MS-MARCO`)
 
 ## 🚀 Getting Started
 
@@ -56,12 +61,22 @@ Built with **LangChain**, **Streamlit**, and **Google Gemini**, this tool allows
 
 ### 1. Ingest Data
 Before running the agent, you need to populate the local database with clinical trial data.
-This script fetches the latest studies from ClinicalTrials.gov and embeds them into ChromaDB.
+This script fetches the latest studies from ClinicalTrials.gov and embeds them into ChromaDB using LlamaIndex.
 
 ```bash
+# Ingest 2000 studies from the last 5 years (default: COMPLETED, PHASE2/3)
 python ingest_ct.py
+
+# Ingest with custom status and phases
+python ingest_ct.py --status RECRUITING,COMPLETED --phases PHASE3
+
+# Ingest 5000 studies from the last 10 years
+python ingest_ct.py --limit 5000 --years 10
+
+# Ingest ALL studies (Warning: Takes a long time!)
+python ingest_ct.py --limit -1
 ```
-*Note: The first run will download the embedding model (~80MB).*
+*Note: The first run will download the embedding model (~400MB).*
 
 ### 2. Run the Agent
 Launch the Streamlit application:
@@ -76,13 +91,13 @@ The app will open in your browser at `http://localhost:8501`.
 Try queries like:
 - *"What are the inclusion criteria for recent Moderna trials?"*
 - *"Compare the Phase 3 studies for lung cancer."*
-- *"Find studies sponsored by Pfizer in 2024."*
+- *"Find recruiting studies for Alzheimer's in the US."*
 
 ## 📂 Project Structure
 
-- `ct_agent_app.py`: Main Streamlit application and agent logic.
-- `ingest_ct.py`: Script to fetch data from CT.gov and build the vector database.
-- `ct_gov_local_db/`: Directory where the ChromaDB vector store is persisted.
+- `ct_agent_app.py`: Main Streamlit application, LangChain agent, and LlamaIndex retrieval logic.
+- `ingest_ct.py`: Script to fetch data from CT.gov and build the LlamaIndex vector store.
+- `ct_gov_index/`: Directory where the LlamaIndex/ChromaDB data is persisted.
 - `requirements.txt`: Python dependencies.
 
 ## ⚠️ Note on Quotas

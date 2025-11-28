@@ -8,3 +8,7 @@ langchain-chroma
 chromadb
 lark
 langchain-huggingface
+llama-index
+llama-index-vector-stores-chroma
+llama-index-embeddings-huggingface
+llama-index-llms-gemini
