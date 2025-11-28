@@ -12,8 +12,20 @@ import chromadb
 
 load_dotenv()
 
+import re
+
 # Disable LLM for ingestion (we only need embeddings)
 Settings.llm = None
+
+def clean_text(text):
+    """Removes HTML tags and extra whitespace."""
+    if not text:
+        return ""
+    # Remove HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
+    # Remove multiple spaces/newlines
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
 def fetch_trials_generator(years=5, max_studies=1000, status=None, phases=None):
     """
@@ -124,87 +136,91 @@ def run_ingestion():
         for study in batch_studies:
             try:
                 protocol = study.get('protocolSection', {})
-                ident = protocol.get('identificationModule', {})
+                identification = protocol.get('identificationModule', {})
+                status_module = protocol.get('statusModule', {})
                 design = protocol.get('designModule', {})
-                status_mod = protocol.get('statusModule', {})
                 eligibility = protocol.get('eligibilityModule', {})
-                desc_mod = protocol.get('descriptionModule', {})
-                cond_mod = protocol.get('conditionsModule', {})
-                outcomes_mod = protocol.get('outcomesModule', {})
-                loc_mod = protocol.get('contactsLocationsModule', {})
-                
-                # Basic Info
-                nct_id = ident.get('nctId', 'Unknown')
-                brief_title = ident.get('briefTitle', 'Untitled')
-                official_title = ident.get('officialTitle', 'No Official Title')
-                sponsor = ident.get('organization', {}).get('fullName', 'Unknown')
-                
-                # Status & Dates
-                overall_status = status_mod.get('overallStatus', 'Unknown')
-                start_date_struct = status_mod.get('startDateStruct', {})
-                start_date = start_date_struct.get('date', 'Unknown')
-                completion_date_struct = status_mod.get('completionDateStruct', {})
-                completion_date = completion_date_struct.get('date', 'Unknown')
-                
-                start_year = int(start_date.split('-')[0]) if '-' in start_date else 1900
+                description = protocol.get('descriptionModule', {})
+                conditions_module = protocol.get('conditionsModule', {})
+                outcomes_module = protocol.get('outcomesModule', {})
+                locations_module = protocol.get('contactsLocationsModule', {})
 
-                # Design
-                phases = design.get('phases', [])
-                phase_str = phases[0] if phases else "NA"
-                study_type = design.get('studyType', 'Unknown')
+                nct_id = identification.get('nctId', 'N/A')
+                title = identification.get('briefTitle', 'N/A')
+                official_title = identification.get('officialTitle', 'N/A')
+                org = identification.get('organization', {}).get('fullName', 'N/A')
+                summary = clean_text(description.get('briefSummary', 'N/A'))
                 
-                # Details
-                summary = desc_mod.get('briefSummary', 'No summary provided.')
-                criteria = eligibility.get('eligibilityCriteria', 'No criteria provided.')
-                sex = eligibility.get('sex', 'All')
-                std_ages = eligibility.get('stdAges', [])
-                age_str = ", ".join(std_ages) if std_ages else "Not specified"
+                overall_status = status_module.get('overallStatus', 'N/A')
+                start_date = status_module.get('startDateStruct', {}).get('date', 'N/A')
+                completion_date = status_module.get('completionDateStruct', {}).get('date', 'N/A')
                 
-                conditions = cond_mod.get('conditions', [])
-                condition_str = ", ".join(conditions)
-                primary_condition = conditions[0] if conditions else "Unknown"
+                phases = ", ".join(design.get('phases', []))
+                study_type = design.get('studyType', 'N/A')
                 
-                primary_outcomes = outcomes_mod.get('primaryOutcomes', [])
-                outcomes_str = "; ".join([f"{o.get('measure', '')}: {o.get('timeFrame', '')}" for o in primary_outcomes])
+                criteria = clean_text(eligibility.get('eligibilityCriteria', 'N/A'))
+                gender = eligibility.get('sex', 'N/A')
+                ages = ", ".join(eligibility.get('stdAges', []))
                 
-                locations = loc_mod.get('locations', [])
-                countries = list(set([loc.get('country', '') for loc in locations if loc.get('country')]))
-                country_str = ", ".join(countries)
-                primary_country = countries[0] if countries else "Unknown"
+                conditions = ", ".join(conditions_module.get('conditions', []))
+                
+                primary_outcomes = []
+                for outcome in outcomes_module.get('primaryOutcomes', []):
+                    measure = outcome.get('measure', '')
+                    desc = outcome.get('description', '')
+                    primary_outcomes.append(f"- {measure}: {desc}")
+                outcomes_str = clean_text("\n".join(primary_outcomes))
 
-                # Construct Rich Content
-                text_content = (
-                    f"Study ID: {nct_id}\n"
-                    f"Title: {brief_title}\n"
-                    f"Official Title: {official_title}\n"
-                    f"Sponsor: {sponsor}\n"
-                    f"Status: {overall_status} (Start: {start_date}, End: {completion_date})\n"
-                    f"Phase: {phase_str}\n"
-                    f"Type: {study_type}\n"
-                    f"Conditions: {condition_str}\n"
-                    f"Population: Sex: {sex}, Ages: {age_str}\n"
-                    f"Locations: {country_str}\n\n"
-                    f"Summary:\n{summary}\n\n"
-                    f"Primary Outcomes:\n{outcomes_str}\n\n"
-                    f"Eligibility Criteria:\n{criteria}"
+                locations = []
+                for loc in locations_module.get('locations', []):
+                    facility = loc.get('facility', 'N/A')
+                    city = loc.get('city', '')
+                    country = loc.get('country', '')
+                    locations.append(f"{facility} ({city}, {country})")
+                locations_str = "; ".join(locations[:5]) # Limit to 5 locations to save space
+
+                # Construct Rich Page Content with Markdown Headers
+                page_content = (
+                    f"# {title}\n"
+                    f"**NCT ID:** {nct_id}\n"
+                    f"**Official Title:** {official_title}\n"
+                    f"**Sponsor:** {org}\n"
+                    f"**Status:** {overall_status}\n"
+                    f"**Phase:** {phases}\n"
+                    f"**Study Type:** {study_type}\n"
+                    f"**Start Date:** {start_date}\n"
+                    f"**Completion Date:** {completion_date}\n\n"
+                    f"## Summary\n{summary}\n\n"
+                    f"## Conditions\n{conditions}\n\n"
+                    f"## Eligibility Criteria\n"
+                    f"**Gender:** {gender}\n"
+                    f"**Ages:** {ages}\n"
+                    f"**Criteria:**\n{criteria}\n\n"
+                    f"## Primary Outcomes\n{outcomes_str}\n\n"
+                    f"## Locations\n{locations_str}"
                 )
-
+                
+                # Metadata for filtering
+                metadata = {
+                    "nct_id": nct_id,
+                    "title": title,
+                    "org": org,
+                    "status": overall_status,
+                    "phase": phases,
+                    "study_type": study_type,
+                    "start_year": int(start_date.split('-')[0]) if start_date != 'N/A' else 0,
+                    "condition": conditions,
+                    "country": locations[0].split(',')[-1].strip() if locations else "Unknown"
+                }
+                
                 doc = Document(
-                    text=text_content,
-                    metadata={
-                        "nct_id": nct_id,
-                        "title": brief_title,
-                        "phase": phase_str,
-                        "study_type": study_type,
-                        "year": start_year,
-                        "sponsor": sponsor,
-                        "status": overall_status,
-                        "condition": primary_condition,
-                        "country": primary_country
-                    }
+                    text=page_content,
+                    metadata=metadata,
+                    id_=nct_id 
                 )
                 documents.append(doc)
-            except Exception:
+            except Exception as e:
+                print(f"⚠️ Error processing study {study.get('protocolSection', {}).get('identificationModule', {}).get('nctId', 'Unknown')}: {e}")
                 continue
         
         if documents:

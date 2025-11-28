@@ -7,10 +7,16 @@ logging.getLogger("langchain_google_genai._function_utils").setLevel(logging.ERR
 from dotenv import load_dotenv
 
 # LlamaIndex Imports
+# LlamaIndex Imports
 from llama_index.core import VectorStoreIndex, StorageContext, Settings
+from llama_index.core.postprocessor import SentenceTransformerRerank
+from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, FilterOperator
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.llms.gemini import Gemini
+from llama_index.core.postprocessor.types import BaseNodePostprocessor
+from llama_index.core.schema import NodeWithScore
+from typing import List, Optional
 import chromadb
 
 # LangChain Imports
@@ -64,41 +70,67 @@ def load_index():
 
 index = load_index()
 
-# 3. Sidebar Filters
-with st.sidebar:
-    st.header("🔍 Filter Studies")
-    
-    # Sponsor Filter
-    sponsor_filter = st.text_input("Sponsor (e.g., Pfizer)")
-    
-    # Year Range Filter
-    year_range = st.slider("Start Year Range", 2000, 2030, (2015, 2025))
-    
-    # Phase Filter
-    phase_options = ["PHASE1", "PHASE2", "PHASE3", "PHASE4", "NA"]
-    selected_phases = st.multiselect("Phase", phase_options)
-    
-    # Study Type Filter
-    type_options = ["Interventional", "Observational", "Expanded Access"]
-    selected_types = st.multiselect("Study Type", type_options)
-    
-    # Status Filter
-    status_options = ["RECRUITING", "COMPLETED", "TERMINATED", "WITHDRAWN", "ACTIVE_NOT_RECRUITING"]
-    selected_statuses = st.multiselect("Recruitment Status", status_options)
-
-# 4. Create LlamaIndex Tool
+# 3. Create LlamaIndex Tool
 from langchain.tools import tool as langchain_tool
 
+class LocalMetadataPostFilter(BaseNodePostprocessor):
+    phase: Optional[str] = None
+    sponsor: Optional[str] = None
+    
+    def _postprocess_nodes(
+        self, nodes: List[NodeWithScore], query_bundle=None
+    ) -> List[NodeWithScore]:
+        filtered_nodes = []
+        for node in nodes:
+            meta = node.metadata
+            match = True
+            if self.phase:
+                # Check if phase is in the metadata string (case-insensitive)
+                if self.phase.lower() not in meta.get("phase", "").lower():
+                    match = False
+            if self.sponsor:
+                if self.sponsor.lower() not in meta.get("org", "").lower():
+                    match = False
+            
+            if match:
+                filtered_nodes.append(node)
+        return filtered_nodes
+
 @langchain_tool
-def search_trials(query: str):
+def search_trials(query: str, status: str = None, phase: str = None, sponsor: str = None, year: int = None):
     """
-    Searches for clinical trials using semantic search.
-    Returns detailed study information including Title, Status, Phase, and Summary.
+    Searches for clinical trials using semantic search with optional strict filters.
+    
+    Args:
+        query: The search query (e.g., "diabetes treatment").
+        status: Filter by status (e.g., "RECRUITING", "COMPLETED").
+        phase: Filter by phase (e.g., "PHASE2", "PHASE3").
+        sponsor: Filter by sponsor name (e.g., "Pfizer").
+        year: Filter for studies starting after this year (e.g., 2020).
     """
-    # Create Query Engine with filters if possible, but for now we rely on the LLM to filter 
-    # or we can implement metadata filters in LlamaIndex later.
-    # For now, we pass the query to the engine.
-    query_engine = index.as_query_engine(similarity_top_k=5)
+    # 1. Pre-retrieval filters (supported by Chroma)
+    filters = []
+    if status:
+        filters.append(MetadataFilter(key="status", value=status.upper(), operator=FilterOperator.EQ))
+    if year:
+        filters.append(MetadataFilter(key="start_year", value=year, operator=FilterOperator.GTE))
+        
+    metadata_filters = MetadataFilters(filters=filters) if filters else None
+    
+    # 2. Post-retrieval filters (custom logic)
+    post_filters = []
+    if phase or sponsor:
+        post_filters.append(LocalMetadataPostFilter(phase=phase, sponsor=sponsor))
+    
+    # 3. Re-ranker
+    reranker = SentenceTransformerRerank(model="cross-encoder/ms-marco-MiniLM-L-6-v2", top_n=3)
+    post_filters.append(reranker)
+    
+    query_engine = index.as_query_engine(
+        similarity_top_k=20, # Fetch more to allow for filtering
+        node_postprocessors=post_filters,
+        filters=metadata_filters
+    )
     response = query_engine.query(query)
     return str(response)
 
@@ -108,28 +140,32 @@ def find_similar_studies(query: str):
     Finds studies similar to a given query or study description. 
     Returns the top studies with their similarity scores.
     """
-    # LlamaIndex query engine is already doing similarity search.
-    # We can reuse the same logic or customize top_k
-    query_engine = index.as_query_engine(similarity_top_k=5)
-    response = query_engine.query(query)
+    # Initialize Re-ranker
+    reranker = SentenceTransformerRerank(model="cross-encoder/ms-marco-MiniLM-L-6-v2", top_n=3)
+    
+    query_engine = index.as_query_engine(
+        similarity_top_k=10,
+        node_postprocessors=[reranker]
+    )
+    response = query_engine.query(f"Find studies similar to: {query}")
     return str(response)
 
+# 4. Define Agent
 tools = [search_trials, find_similar_studies]
 
-system_prompt = """
-You are an expert Clinical Research Assistant.
-1. Use 'search_trials' to find real data based on user queries.
-2. Use 'find_similar_studies' when the user asks for comparisons or "similar" studies.
-3. Always cite the NCT ID.
-4. If the user provided filters in the context, prioritize them.
-"""
-
-prompt = ChatPromptTemplate.from_messages([
-    ("system", system_prompt),
-    ("placeholder", "{chat_history}"),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
+prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are a Clinical Trial Expert Assistant. Use the `search_trials` tool to find relevant studies based on the user's query. "
+            "Use `find_similar_studies` when the user asks for similar trials. "
+            "Always provide the NCT ID, Title, Status, and a brief summary for each study found. "
+            "If the user asks for a comparison, search for the relevant studies first and then compare them based on the retrieved data."
+        ),
+        ("human", "{input}"),
+        ("placeholder", "{agent_scratchpad}"),
+    ]
+)
 
 agent = create_tool_calling_agent(llm, tools, prompt)
 agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
@@ -138,89 +174,75 @@ agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-for msg in st.session_state.messages:
-    role = "user" if isinstance(msg, HumanMessage) else "assistant"
-    with st.chat_message(role):
-        st.markdown(msg.content)
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-if user_input := st.chat_input("Ex: Find Phase 3 Pfizer studies started after 2022"):
-    st.session_state.messages.append(HumanMessage(content=user_input))
+if prompt := st.chat_input("Ask about clinical trials..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
-        st.markdown(user_input)
-
-    # Augment query with sidebar filters
-    augmented_input = user_input
-    filter_context = []
-    if sponsor_filter:
-        filter_context.append(f"Sponsor: {sponsor_filter}")
-    if selected_phases:
-        filter_context.append(f"Phases: {', '.join(selected_phases)}")
-    if selected_types:
-        filter_context.append(f"Types: {', '.join(selected_types)}")
-    if selected_statuses:
-        filter_context.append(f"Status: {', '.join(selected_statuses)}")
-    filter_context.append(f"Year Range: {year_range[0]}-{year_range[1]}")
-    
-    if filter_context:
-        augmented_input = f"{user_input}\n\nContext from Sidebar Filters (Apply these strictly):\n" + "\n".join(filter_context)
+        st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Agent is thinking..."):
+        with st.spinner("Analyzing clinical trials..."):
             try:
-                response = agent_executor.invoke({
-                    "input": augmented_input, 
-                    "chat_history": st.session_state.messages
-                })
+                response = agent_executor.invoke({"input": prompt})
                 output = response["output"]
                 st.markdown(output)
-                st.session_state.messages.append(AIMessage(content=output))
-                
-                # --- ANALYTICS & EXPORT ---
-                with st.expander("📊 Analytics & Export"):
-                    # Use LlamaIndex retriever to fetch nodes for visualization
-                    retriever = index.as_retriever(similarity_top_k=50)
-                    nodes = retriever.retrieve(user_input)
-                    
-                    if nodes:
-                        data = []
-                        for node in nodes:
-                            # Access metadata from the node
-                            meta = node.metadata
-                            data.append({
-                                "NCT ID": meta.get("nct_id"),
-                                "Title": meta.get("title"),
-                                "Sponsor": meta.get("sponsor"),
-                                "Phase": meta.get("phase"),
-                                "Year": meta.get("year"),
-                                "Type": meta.get("study_type")
-                            })
-                        
-                        df = pd.DataFrame(data)
-                        
-                        # Visualizations
-                        st.subheader("Phase Distribution")
-                        st.bar_chart(df["Phase"].value_counts())
-                        
-                        st.subheader("Top Sponsors")
-                        st.bar_chart(df["Sponsor"].value_counts().head(10))
-                        
-                        st.subheader("Start Year Trend")
-                        if "Year" in df.columns:
-                            year_counts = df["Year"].value_counts().sort_index()
-                            st.line_chart(year_counts)
-                        
-                        # Export
-                        st.subheader("📥 Export Data")
-                        csv = df.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            "Download Search Results (CSV)",
-                            csv,
-                            "clinical_trials_results.csv",
-                            "text/csv",
-                            key='download-csv'
-                        )
-                    else:
-                        st.info("No structured data found for analytics.")
-
+                st.session_state.messages.append({"role": "assistant", "content": output})
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"An error occurred: {e}")
+
+# 6. Analytics & Export (On-Demand)
+with st.expander("📊 Analytics & Export"):
+    st.write("Analyze the top 50 most relevant studies to your last query (or general trends).")
+    
+    if st.button("Load Analytics"):
+        with st.spinner("Generating analytics..."):
+            # Use LlamaIndex Retriever to fetch nodes for analytics
+            # We fetch a larger batch (e.g., 50) to generate meaningful charts
+            retriever = index.as_retriever(similarity_top_k=50)
+            nodes = retriever.retrieve("clinical trials") # Retrieve general or context-based nodes
+            
+            data = []
+            for node in nodes:
+                meta = node.metadata
+                data.append({
+                    "Phase": meta.get("phase", "NA"),
+                    "Sponsor": meta.get("org", "Unknown"),
+                    "Year": meta.get("start_year", 0),
+                    "Status": meta.get("status", "Unknown"),
+                    "Study Type": meta.get("study_type", "Unknown"),
+                    "Country": meta.get("country", "Unknown")
+                })
+            
+            if data:
+                df = pd.DataFrame(data)
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.subheader("Phase Distribution")
+                    phase_counts = df['Phase'].value_counts()
+                    st.bar_chart(phase_counts)
+                    
+                with col2:
+                    st.subheader("Top Sponsors")
+                    sponsor_counts = df['Sponsor'].value_counts().head(10)
+                    st.bar_chart(sponsor_counts)
+                    
+                st.subheader("Start Year Trend")
+                year_counts = df['Year'].value_counts().sort_index()
+                st.line_chart(year_counts)
+                
+                # Export Button
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    "Download Search Results (CSV)",
+                    csv,
+                    "clinical_trials_results.csv",
+                    "text/csv",
+                    key='download-csv'
+                )
+            else:
+                st.info("No data available for analytics.")

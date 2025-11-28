@@ -8,8 +8,7 @@ Built with **LangChain**, **LlamaIndex**, **Streamlit**, and **Google Gemini**, 
 
 - **Natural Language Search**: Ask questions like "Find Phase 3 Pfizer studies for diabetes started after 2022" instead of using complex search forms.
 - **Advanced RAG Pipeline**: Powered by **LlamaIndex** for robust document indexing and retrieval.
-- **Smart Filtering**: The agent automatically extracts filters (Year, Phase, Sponsor, Status, Study Type) from your query to narrow down results.
-- **Interactive Sidebar**: Manually refine your search with sidebar filters for precise control.
+- **Smart Filtering**: The agent uses a hybrid approach (database + post-processing) to strictly filter results by **Year**, **Phase**, **Sponsor**, and **Status** based on your natural language query.
 - **Analytics Dashboard**: Visualize search results with charts for **Phase Distribution**, **Top Sponsors**, and **Yearly Trends**.
 - **Data Export**: Download your search results as a CSV file for further analysis.
 - **Comprehensive Data**: Ingests detailed study information including **Summaries**, **Outcomes**, **Eligibility Criteria**, **Conditions**, **Locations**, and **Study Population**.
