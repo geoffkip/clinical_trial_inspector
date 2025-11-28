@@ -7,7 +7,6 @@ logging.getLogger("langchain_google_genai._function_utils").setLevel(logging.ERR
 from dotenv import load_dotenv
 
 # LlamaIndex Imports
-# LlamaIndex Imports
 from llama_index.core import VectorStoreIndex, StorageContext, Settings
 from llama_index.core.postprocessor import SentenceTransformerRerank
 from llama_index.core.vector_stores import MetadataFilters, MetadataFilter, FilterOperator
