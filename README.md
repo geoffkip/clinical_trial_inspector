@@ -45,6 +45,7 @@ The agent is equipped with specialized tools to handle different types of reques
 *   **Purpose**: Aggregates data to reveal trends and insights.
 *   **Capabilities**:
     *   **Multi-Filtering**: Can filter by **Phase**, **Status**, and **Sponsor** *before* aggregation (e.g., "Phase 2 studies by Pfizer").
+    *   **Grouping**: Supports grouping by **Phase**, **Status**, **Sponsor**, **Start Year**, and **Condition** (Indication).
     *   **Full Dataset Access**: For general questions (e.g., "Top sponsors overall"), it scans the entire 60,000+ study database.
     *   **Visuals**: Triggers inline **Bar** and **Line** charts in the chat.
 
