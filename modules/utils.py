@@ -7,6 +7,7 @@ This module handles:
 3.  **Normalization**: Helper functions for standardizing data (e.g., sponsor names).
 4.  **Filtering**: Custom post-processors for filtering retrieval results.
 """
+
 import os
 import streamlit as st
 from typing import List, Optional
@@ -15,6 +16,7 @@ from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.gemini import Gemini
 from llama_index.core.schema import NodeWithScore
+from llama_index.core.postprocessor.types import BaseNodePostprocessor
 import chromadb
 
 
@@ -53,16 +55,16 @@ def load_index() -> VectorStoreIndex:
     setup_llama_index()
     # Initialize ChromaDB client pointing to the local persistence directory
     db = chromadb.PersistentClient(path="./ct_gov_index")
-    
+
     # Get or create the collection for clinical trials
     chroma_collection = db.get_or_create_collection("clinical_trials")
-    
+
     # Create the vector store wrapper
     vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-    
+
     # Create storage context
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
-    
+
     # Load the index from the vector store
     index = VectorStoreIndex.from_vector_store(
         vector_store, storage_context=storage_context
@@ -110,7 +112,7 @@ def normalize_sponsor(sponsor: str) -> Optional[str]:
 
 
 # --- Custom Filters ---
-class LocalMetadataPostFilter:
+class LocalMetadataPostFilter(BaseNodePostprocessor):
     """
     Custom LlamaIndex post-processor for filtering retrieved nodes based on metadata.
 
@@ -123,9 +125,21 @@ class LocalMetadataPostFilter:
         sponsor (Optional[str]): Sponsor name to filter by (fuzzy match).
     """
 
-    def __init__(self, phase: Optional[str] = None, sponsor: Optional[str] = None):
+    def __init__(
+        self,
+        phase: Optional[str] = None,
+        sponsor: Optional[str] = None,
+        intervention: Optional[str] = None,
+    ):
         self.phase = phase
         self.sponsor = sponsor
+        self.intervention = intervention
+
+    def postprocess_nodes(
+        self, nodes: List[NodeWithScore], query_bundle=None
+    ) -> List[NodeWithScore]:
+        """Public interface for LlamaIndex."""
+        return self._postprocess_nodes(nodes, query_bundle)
 
     def _postprocess_nodes(
         self, nodes: List[NodeWithScore], query_bundle=None
@@ -164,9 +178,52 @@ class LocalMetadataPostFilter:
                 if norm_target not in norm_node:
                     keep = False
 
+            # Intervention Filter (Fuzzy match)
+            if self.intervention and keep:
+                node_intervention = str(metadata.get("intervention", "")).lower()
+                target_intervention = self.intervention.lower()
+                if target_intervention not in node_intervention:
+                    keep = False
+
             if keep:
                 new_nodes.append(node)
         return new_nodes
+
+
+class KeywordBoostingPostProcessor(BaseNodePostprocessor):
+    """
+    Boosts the score of nodes that contain exact keyword matches in the Title or NCT ID.
+    This mimics BM25 behavior by rewarding exact surface form matches.
+    """
+
+    def postprocess_nodes(
+        self, nodes: List[NodeWithScore], query_bundle=None
+    ) -> List[NodeWithScore]:
+        return self._postprocess_nodes(nodes, query_bundle)
+
+    def _postprocess_nodes(
+        self, nodes: List[NodeWithScore], query_bundle=None
+    ) -> List[NodeWithScore]:
+        if not query_bundle:
+            return nodes
+
+        query_terms = [t.lower() for t in query_bundle.query_str.split() if len(t) > 3]
+
+        for node in nodes:
+            metadata = node.node.metadata
+            title = str(metadata.get("title", "")).lower()
+            nct_id = str(metadata.get("nct_id", "")).lower()
+
+            # Simple boosting logic
+            for term in query_terms:
+                if term in title:
+                    node.score *= 1.1  # 10% boost for title match
+                if term in nct_id:
+                    node.score *= 1.5  # 50% boost for ID match
+
+        # Re-sort by new score
+        nodes.sort(key=lambda x: x.score, reverse=True)
+        return nodes
 
     def __call__(
         self, nodes: List[NodeWithScore], query_bundle=None

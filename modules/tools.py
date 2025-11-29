@@ -7,6 +7,7 @@ Tools include:
 2.  **find_similar_studies**: Finding studies semantically similar to a given text.
 3.  **get_study_analytics**: Aggregating data for trends and insights (with inline charts).
 """
+
 import pandas as pd
 import streamlit as st
 from typing import Optional
@@ -16,11 +17,52 @@ from llama_index.core.vector_stores import (
     MetadataFilters,
     FilterOperator,
 )
+from llama_index.core import Settings
 from llama_index.core.postprocessor import SentenceTransformerRerank
-from modules.utils import load_index, normalize_sponsor, LocalMetadataPostFilter
+from llama_index.core.query_engine import SubQuestionQueryEngine
+from llama_index.core.tools import QueryEngineTool, ToolMetadata
+from modules.utils import (
+    load_index,
+    normalize_sponsor,
+    LocalMetadataPostFilter,
+    KeywordBoostingPostProcessor,
+)
 import re
 
 # --- Tools ---
+
+
+def expand_query(query: str) -> str:
+    """Expands a search query with synonyms using the LLM."""
+    if not query or len(query.split()) > 10:  # Skip expansion for long queries
+        return query
+
+    prompt = (
+        f"You are a helpful medical assistant. "
+        f"Expand the following search query with relevant medical synonyms and acronyms. "
+        f"Return ONLY the expanded query string combined with OR operators. "
+        f"Do not add any explanation.\n\n"
+        f"Query: {query}\n"
+        f"Expanded Query:"
+    )
+    try:
+        # Use the global Settings.llm
+        if not Settings.llm:
+            # Fallback if not initialized (though load_index does it)
+            from modules.utils import setup_llama_index
+
+            setup_llama_index()
+
+        response = Settings.llm.complete(prompt)
+        expanded = response.text.strip()
+        # Clean up if LLM is chatty
+        if "Expanded Query:" in expanded:
+            expanded = expanded.split("Expanded Query:")[-1].strip()
+        print(f"✨ Expanded Query: '{query}' -> '{expanded}'")
+        return expanded
+    except Exception as e:
+        print(f"⚠️ Query expansion failed: {e}")
+        return query
 
 
 @langchain_tool("search_trials")
@@ -29,6 +71,7 @@ def search_trials(
     status: str = None,
     phase: str = None,
     sponsor: str = None,
+    intervention: str = None,
     year: int = None,
 ):
     """
@@ -46,6 +89,7 @@ def search_trials(
                                Accepts comma-separated values for multiple phases.
         sponsor (str, optional): Filter by sponsor name (e.g., "Pfizer").
                                  Accepts comma-separated values.
+        intervention (str, optional): Filter by intervention/drug name (e.g., "Keytruda").
         year (int, optional): Filter for studies starting on or after this year (e.g., 2020).
 
     Returns:
@@ -59,6 +103,8 @@ def search_trials(
         parts = []
         if sponsor:
             parts.append(sponsor)
+        if intervention:
+            parts.append(intervention)
         if phase:
             parts.append(phase)
         if status:
@@ -71,8 +117,13 @@ def search_trials(
             norm_sponsor = normalize_sponsor(sponsor)
             if norm_sponsor and norm_sponsor.lower() not in query.lower():
                 query = f"{norm_sponsor} {query}"
+        if intervention and intervention.lower() not in query.lower():
+            query = f"{intervention} {query}"
         if phase and phase.lower() not in query.lower():
             query = f"{phase} {query}"
+
+        # Expand query with synonyms
+        query = expand_query(query)
 
     # --- Pre-Retrieval Filters (ChromaDB) ---
     # These filters are applied *before* vector search, reducing the search space.
@@ -102,15 +153,23 @@ def search_trials(
     metadata_filters = MetadataFilters(filters=filters) if filters else None
 
     print(
-        f"🔍 Tool Called: search_trials(query='{query}', status='{status}', phase='{phase}', sponsor='{sponsor}')"
+        f"🔍 Tool Called: search_trials(query='{query}', status='{status}', phase='{phase}', sponsor='{sponsor}', intervention='{intervention}')"
     )
 
     # --- Post-Retrieval Filters (Custom) ---
     # These filters are applied *after* fetching candidates.
     # Useful for complex logic like fuzzy matching or multi-value fields that Chroma might not handle perfectly.
     post_filters = []
-    if phase or sponsor:
-        post_filters.append(LocalMetadataPostFilter(phase=phase, sponsor=sponsor))
+    if phase or sponsor or intervention:
+        post_filters.append(
+            LocalMetadataPostFilter(
+                phase=phase, sponsor=sponsor, intervention=intervention
+            )
+        )
+
+    # --- Hybrid Search Tuning ---
+    # Boost results with exact keyword matches in Title/ID
+    post_filters.append(KeywordBoostingPostProcessor())
 
     # --- Re-Ranking ---
     # Use a Cross-Encoder to re-score the top results for better relevance.
@@ -121,7 +180,7 @@ def search_trials(
 
     # Increase retrieval limit if filters are present to ensure we get enough candidates
     # before post-filtering reduces the count.
-    top_k = 200 if (phase or sponsor) else 50
+    top_k = 200 if (phase or sponsor or intervention) else 50
 
     query_engine = index.as_query_engine(
         similarity_top_k=top_k,
@@ -129,6 +188,24 @@ def search_trials(
         filters=metadata_filters,
     )
     response = query_engine.query(query)
+
+    # --- Self-Correction / Retry Logic ---
+    if not response.source_nodes and (phase or sponsor or intervention):
+        print(
+            "⚠️ No results found with strict filters. Retrying with relaxed filters..."
+        )
+        # Retry without the strict LocalMetadataPostFilter, but keep the Re-Ranker
+        relaxed_post_filters = [reranker]
+
+        query_engine_relaxed = index.as_query_engine(
+            similarity_top_k=50,
+            node_postprocessors=relaxed_post_filters,
+            filters=metadata_filters,  # Keep pre-retrieval filters (Status, Year) as they are usually hard constraints
+        )
+        response = query_engine_relaxed.query(query)
+        if response.source_nodes:
+            return f"No exact matches found for your strict filters. Here are some semantically relevant studies for '{query}':\n{response}"
+
     print(f"✅ Retrieved {len(response.source_nodes)} nodes after filtering.")
     return str(response)
 
@@ -167,6 +244,7 @@ def get_study_analytics(
     phase: Optional[str] = None,
     status: Optional[str] = None,
     sponsor: Optional[str] = None,
+    intervention: Optional[str] = None,
 ):
     """
     Aggregates clinical trial data based on a search query and groups by a specific field.
@@ -184,6 +262,7 @@ def get_study_analytics(
         phase (Optional[str]): Optional filter for phase (e.g., "PHASE2").
         status (Optional[str]): Optional filter for status (e.g., "RECRUITING").
         sponsor (Optional[str]): Optional filter for sponsor (e.g., "Pfizer").
+        intervention (Optional[str]): Optional filter for intervention (e.g., "Keytruda").
 
     Returns:
         str: A summary string of the top counts and a note that a chart has been generated.
@@ -234,6 +313,12 @@ def get_study_analytics(
         target_sponsor = normalize_sponsor(sponsor).lower()
         df["org_lower"] = df["org"].astype(str).apply(normalize_sponsor).str.lower()
         df = df[df["org_lower"].str.contains(target_sponsor, regex=False)]
+
+    # Filter by Intervention (Fuzzy match)
+    if intervention:
+        target_intervention = intervention.lower()
+        df["intervention_lower"] = df["intervention"].astype(str).str.lower()
+        df = df[df["intervention_lower"].str.contains(target_intervention, regex=False)]
 
     if df.empty:
         return "No studies found after applying filters."
@@ -295,3 +380,46 @@ def get_study_analytics(
         st.session_state["inline_chart_data"] = chart_data
 
     return f"Found {len(df)} studies. Top counts:\n{summary}\n\n(Chart generated in UI)"
+
+
+@langchain_tool("compare_studies")
+def compare_studies(query: str):
+    """
+    Compares multiple studies or answers complex multi-part questions using query decomposition.
+
+    Use this tool when the user asks to "compare", "contrast", or analyze differences/similarities
+    between specific studies, sponsors, or phases. It breaks down the question into sub-questions.
+
+    Args:
+        query (str): The complex comparison query (e.g., "Compare the primary outcomes of Keytruda vs Opdivo").
+
+    Returns:
+        str: A detailed response synthesizing the answers to sub-questions.
+    """
+    index = load_index()
+
+    # Create a base query engine for the sub-questions
+    # We use a standard engine with a reasonable top_k
+    base_engine = index.as_query_engine(similarity_top_k=10)
+
+    # Wrap it in a QueryEngineTool
+    query_tool = QueryEngineTool(
+        query_engine=base_engine,
+        metadata=ToolMetadata(
+            name="clinical_trials_db",
+            description="Vector database of clinical trial protocols, results, and metadata.",
+        ),
+    )
+
+    # Create the SubQuestionQueryEngine
+    # It will use the LLM to break the 'query' into sub-questions that target 'clinical_trials_db'
+    query_engine = SubQuestionQueryEngine.from_defaults(
+        query_engine_tools=[query_tool],
+        use_async=True,
+    )
+
+    try:
+        response = query_engine.query(query)
+        return str(response)
+    except Exception as e:
+        return f"Error during comparison: {e}"

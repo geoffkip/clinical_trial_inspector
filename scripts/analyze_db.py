@@ -14,6 +14,7 @@ Usage:
     # OR
     cd scripts && python analyze_db.py
 """
+
 import chromadb
 import pandas as pd
 import os
@@ -27,7 +28,7 @@ def analyze_db():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     db_path = os.path.join(project_root, "ct_gov_index")
-    
+
     if not os.path.exists(db_path):
         print(f"❌ Database directory '{db_path}' does not exist.")
         print("   Please run 'python scripts/ingest_ct.py' first to ingest data.")
@@ -36,7 +37,7 @@ def analyze_db():
     print(f"📂 Loading database from {db_path}...")
     try:
         client = chromadb.PersistentClient(path=db_path)
-        
+
         # Check for collection existence
         collections = client.list_collections()
         # Handle different ChromaDB versions for list_collections output
