@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 import argparse
 import time
 from tqdm import tqdm
+import os 
 
 # LlamaIndex Imports
 from llama_index.core import Document, VectorStoreIndex, StorageContext, Settings
