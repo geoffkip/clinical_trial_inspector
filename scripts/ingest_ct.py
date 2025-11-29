@@ -129,6 +129,7 @@ def fetch_trials_generator(
                     "protocolSection.conditionsModule.conditions",
                     "protocolSection.outcomesModule.primaryOutcomes",
                     "protocolSection.contactsLocationsModule.locations",
+                    "protocolSection.armsInterventionsModule",
                 ]
             ),
         }
