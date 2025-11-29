@@ -13,7 +13,7 @@ Built with **LangChain**, **LlamaIndex**, **Streamlit**, **Altair**, and **Googl
 
 ### 📊 Visual Analytics & Insights
 - **Inline Charts (Contextual)**: The agent automatically generates **Bar Charts** and **Line Charts** directly in the chat stream when you ask aggregation questions (e.g., *"Top sponsors for Multiple Myeloma"*).
-- **Sidebar Dashboard (Global)**: The "Analytics & Export" sidebar provides a high-level view of the **entire dataset** (60,000+ studies). It is always available and independent of your current chat query, allowing you to explore global trends while conversing.
+- **Analytics Tab (Global)**: The "Analytics & Export" tab provides a high-level view of the **entire dataset** (60,000+ studies). It is always available and independent of your current chat query, allowing you to explore global trends while conversing.
 - **Precise Formatting**: Year-based trends are displayed with precision (e.g., "2023") using **Altair**.
 
 ### 🔍 Multi-Filter Analysis
@@ -113,10 +113,10 @@ Before running the agent, populate the local database. The ingestion script fetc
 
 ```bash
 # Recommended: Ingest 5000 recent studies
-python ingest_ct.py --limit 5000 --years 5
+python scripts/ingest_ct.py --limit 5000 --years 5
 
 # Ingest ALL studies (Warning: Large download!)
-python ingest_ct.py --limit -1
+python scripts/ingest_ct.py --limit -1
 ```
 
 ### 2. Run the Agent
@@ -138,9 +138,15 @@ Try these queries to see the agent in action:
 
 ## 📂 Project Structure
 
-- `ct_agent_app.py`: Main application logic, including the LangChain agent, Streamlit UI, and Analytics tools.
-- `ingest_ct.py`: Data pipeline script for fetching, processing, and embedding ClinicalTrials.gov data.
+- `ct_agent_app.py`: Main application logic (Streamlit UI, Agent orchestration).
+- `modules/`: Contains refactored code modules.
+    - `utils.py`: Utility functions for data processing and UI helpers.
+    - `tools.py`: LangChain tool definitions (`search_trials`, `get_study_analytics`, etc.).
+- `scripts/`: Utility scripts.
+    - `ingest_ct.py`: Data pipeline script for fetching, processing, and embedding ClinicalTrials.gov data.
+    - `analyze_db.py`: Script for analyzing the contents of the local vector database.
 - `ct_gov_index/`: Persisted ChromaDB vector store.
+- `tests/`: Unit tests for the application.
 - `requirements.txt`: Project dependencies.
 
 ## ⚠️ Note on Quotas
