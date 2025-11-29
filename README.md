@@ -13,7 +13,7 @@ Built with **LangChain**, **LlamaIndex**, **Streamlit**, **Altair**, and **Googl
 
 ### 📊 Visual Analytics & Insights
 - **Inline Charts (Contextual)**: The agent automatically generates **Bar Charts** and **Line Charts** directly in the chat stream when you ask aggregation questions (e.g., *"Top sponsors for Multiple Myeloma"*).
-- **Analytics Tab (Global)**: The "Analytics & Export" tab provides a high-level view of the **entire dataset** (60,000+ studies). It is always available and independent of your current chat query, allowing you to explore global trends while conversing.
+- **Analytics Dashboard (Global)**: The "Analytics Dashboard" page provides a high-level view of the **entire dataset** (60,000+ studies). It is always available via the sidebar and independent of your current chat query, allowing you to explore global trends while conversing.
 - **Precise Formatting**: Year-based trends are displayed with precision (e.g., "2023") using **Altair**.
 
 ### 🔍 Multi-Filter Analysis

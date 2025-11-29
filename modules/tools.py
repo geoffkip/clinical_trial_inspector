@@ -180,7 +180,7 @@ def get_study_analytics(
 
     Args:
         query (str): The search query to filter studies (e.g., "cancer").
-        group_by (str): The field to group by. Options: "phase", "status", "sponsor", "start_year".
+        group_by (str): The field to group by. Options: "phase", "status", "sponsor", "start_year", "condition".
         phase (Optional[str]): Optional filter for phase (e.g., "PHASE2").
         status (Optional[str]): Optional filter for status (e.g., "RECRUITING").
         sponsor (Optional[str]): Optional filter for sponsor (e.g., "Pfizer").
@@ -190,14 +190,25 @@ def get_study_analytics(
     """
     index = load_index()
 
-    # 1. Retrieve ALL relevant docs (high limit for analytics)
-    # We fetch a larger set (500) to get a representative sample for aggregation.
-    retriever = index.as_retriever(similarity_top_k=500)
-    nodes = retriever.retrieve(query)
-
-    data = []
-    for node in nodes:
-        data.append(node.metadata)
+    # 1. Retrieve Data
+    # If query is "overall" (used by the global dashboard), we fetch ALL metadata directly
+    # from the underlying collection to ensure accurate counts.
+    # Otherwise, we use semantic search with a high limit.
+    if query.lower() == "overall":
+        try:
+            # Access underlying Chroma collection
+            collection = index.vector_store._collection
+            # Fetch all metadata (no embeddings/documents needed for analytics)
+            result = collection.get(include=["metadatas"])
+            data = result["metadatas"]
+        except Exception as e:
+            return f"Error fetching full dataset: {e}"
+    else:
+        # Semantic Search for specific queries (e.g., "breast cancer")
+        # We fetch a larger set (1000) to get a representative sample.
+        retriever = index.as_retriever(similarity_top_k=1000)
+        nodes = retriever.retrieve(query)
+        data = [node.metadata for node in nodes]
 
     df = pd.DataFrame(data)
 
@@ -233,10 +244,11 @@ def get_study_analytics(
         "status": "status",
         "sponsor": "org",
         "start_year": "start_year",
+        "condition": "condition",
     }
 
     if group_by not in key_map:
-        return f"Invalid group_by field: {group_by}. Valid options: phase, status, sponsor, start_year"
+        return f"Invalid group_by field: {group_by}. Valid options: phase, status, sponsor, start_year, condition"
 
     col = key_map[group_by]
 
@@ -245,6 +257,10 @@ def get_study_analytics(
         # Ensure numeric for year
         df[col] = pd.to_numeric(df[col], errors="coerce")
         counts = df[col].value_counts().sort_index()
+    elif col == "condition":
+        # Split and explode to count individual conditions
+        # e.g., "Diabetes, Hypertension" -> ["Diabetes", "Hypertension"]
+        counts = df[col].astype(str).str.split(", ").explode().value_counts().head(10)
     else:
         # Top 10 for categorical fields
         counts = df[col].value_counts().head(10)
