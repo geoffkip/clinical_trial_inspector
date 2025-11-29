@@ -61,6 +61,31 @@ The agent is equipped with specialized tools to handle different types of reques
     *   **Re-Ranking**: Cross-Encoder re-scoring.
 4.  **Synthesis**: **Google Gemini** synthesizes the final answer.
 
+### 🏗️ Architecture Diagram
+
+```mermaid
+graph TD
+    subgraph Ingestion ["Ingestion Pipeline (Parallel)"]
+        API[ClinicalTrials.gov API] -->|Fetch Batches| Script[ingest_ct.py]
+        Script -->|Process & Embed| Chroma[(ChromaDB)]
+    end
+
+    subgraph Retrieval ["RAG Retrieval Flow"]
+        User[User Query] -->|Expand| Synonyms[Synonym Injection]
+        Synonyms -->|Hybrid Search| Vector[Vector Search] & Keyword[Keyword Boosting]
+        Vector & Keyword -->|Candidates| PreFilter[Pre-Retrieval Filters]
+        PreFilter -->|Candidates| PostFilter[Post-Retrieval Filters]
+        PostFilter -->|Top N| ReRank[Cross-Encoder Re-Ranking]
+        ReRank -->|Context| LLM[Google Gemini]
+        LLM -->|Answer| Response[Final Response]
+    end
+
+    subgraph Graph ["Knowledge Graph"]
+        Chroma -->|Metadata| GraphBuilder[build_graph]
+        GraphBuilder -->|Nodes & Edges| Agraph[Streamlit Agraph]
+    end
+```
+
 ## 🛠️ Tech Stack
 
 - **Frontend**: Streamlit, Altair, Streamlit-Agraph
