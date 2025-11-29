@@ -7,7 +7,7 @@ Built with **LangChain**, **LlamaIndex**, **Streamlit**, **Altair**, **Streamlit
 ## ✨ Key Features
 
 ### 🧠 Intelligent Search & RAG
-- **Natural Language Queries**: Ask complex questions like *"Find Phase 3 Pfizer studies for diabetes started after 2022"* or *"What are the inclusion criteria for recent Moderna trials?"*.
+- **Natural Language Queries**: Ask complex questions like *"Find Phase 3 Pfizer studies for Multiple Myeloma started after 2022""*.
 - **Semantic Understanding**: Powered by **PubMedBERT** embeddings (`pritamdeka/S-PubMedBert-MS-MARCO`) to understand medical context better than keyword matching.
 - **Advanced Retrieval**:
     - **Query Expansion**: Automatically expands queries with medical synonyms (e.g., "cancer" -> "carcinoma", "tumor") using the LLM.
@@ -155,7 +155,7 @@ streamlit run ct_agent_app.py
 ```
 
 ### 3. Ask Questions!
-- **Search**: *"Find recruiting studies for Alzheimer's in the US."*
+- **Search**: *"Find studies for Multiple Myeloma in the US."*
 - **Comparison**: *"Compare the primary outcomes of Keytruda vs Opdivo."*
 - **Analytics**: *"Who are the top sponsors for Breast Cancer?"* (Now supports grouping by **Intervention** and **Study Type**!)
 - **Graph**: Go to the **Knowledge Graph** tab to visualize connections.
