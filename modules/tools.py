@@ -174,7 +174,7 @@ def search_trials(
     # --- Re-Ranking ---
     # Use a Cross-Encoder to re-score the top results for better relevance.
     reranker = SentenceTransformerRerank(
-        model="cross-encoder/ms-marco-MiniLM-L-6-v2", top_n=5
+        model="cross-encoder/ms-marco-MiniLM-L-12-v2", top_n=5
     )
     post_filters.append(reranker)
 
