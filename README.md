@@ -22,6 +22,10 @@ Built with **LangChain**, **LlamaIndex**, **Streamlit**, **Altair**, and **Googl
 - **Full Dataset Scope**: General analytics questions (e.g., *"Who are the top sponsors in the dataset?"*) analyze the **entire 60,000+ study database**, not just a sample.
 - **Smart Retrieval**: For specific queries, the agent retrieves up to **5,000 relevant studies** to ensure comprehensive analysis.
 
+### 🏥 Cohort Design & SQL Generation
+- **Criteria Translation**: Automatically translates unstructured Inclusion/Exclusion criteria into structured cohort definitions for claims analysis (e.g., mapping "Type 2 Diabetes" to ICD-10 codes).
+- **SQL Generation**: Generates sample SQL queries to help analysts identify eligible patient cohorts in real-world data (RWD) or claims databases.
+
 ### 📂 Comprehensive Data Management
 - **Raw Data Export**: View and download the full dataset as a CSV, including **NCT ID**, **Title**, **Sponsor**, **Phase**, and **Conditions**.
 - **Local Vector Store**: Efficiently stores and retrieves tens of thousands of studies using **ChromaDB**.
