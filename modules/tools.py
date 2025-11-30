@@ -98,7 +98,6 @@ def search_trials(
     
     # Constants
     TOP_K_STRICT = 500  # High recall for pre-filtered search
-    TOP_K_HYBRID = 500  # Higher recall for hybrid search (fuzzy matching)
     
     # --- Query Construction ---
     if not query:
