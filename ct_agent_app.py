@@ -109,8 +109,6 @@ def get_agent():
                 "When asked about 'trends', 'counts', 'how many', or 'most common', ALWAYS use the `get_study_analytics` tool. "
                 "Do NOT use `search_trials` for counting questions like 'How many studies...'. "
                 "When asked to 'find studies', 'search', or 'list', use `search_trials`. "
-                "ALWAYS report the exact 'Total Potential Matches' and 'Relevant Matches' counts returned by the tool. "
-                "Do not summarize '50 potential matches' as just '3 studies'. "
                 "When asked to 'compare' multiple studies or answer complex multi-part questions, use `compare_studies`. "
                 "If the user asks for a specific study by ID (e.g., NCT12345678), `search_trials` handles that automatically. "
                 "However, if the user asks for specific **details**, **criteria**, **summary**, or **protocol** of a single study, "
