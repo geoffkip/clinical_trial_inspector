@@ -77,7 +77,7 @@ The agent is equipped with specialized tools to handle different types of reques
 2.  **Embedding**: Text is converted into vector embeddings using `PubMedBERT` and stored in **ChromaDB**.
 3.  **Retrieval**:
     *   **Query Transformation**: Synonyms are injected via LLM.
-    *   **Hybrid Search**: Vector search + Keyword Boosting.
+    *   **Hybrid Search**: Parallel **Vector Search** (Semantic) and **BM25** (Keyword) combined via **Reciprocal Rank Fusion (RRF)**.
     *   **Filtering**: Pre-retrieval (Status, Year) and Post-retrieval (Phase, Sponsor, Intervention) filters.
     *   **Re-Ranking**: Cross-Encoder re-scoring.
 4.  **Synthesis**: **Google Gemini** synthesizes the final answer.
@@ -95,8 +95,9 @@ graph TD
 ```mermaid
 graph TD
     User[User Query] -->|Expand| Synonyms[Synonym Injection]
-    Synonyms -->|Hybrid Search| Vector[Vector Search] & Keyword[Keyword Boosting]
-    Vector & Keyword -->|Candidates| PreFilter[Pre-Retrieval Filters]
+    Synonyms -->|Parallel Search| Vector[Vector Search] & BM25[BM25 Keyword Search]
+    Vector & BM25 -->|Reciprocal Rank Fusion| Fusion[Merged Candidates]
+    Fusion -->|Candidates| PreFilter[Pre-Retrieval Filters]
     PreFilter -->|Candidates| PostFilter[Post-Retrieval Filters]
     PostFilter -->|Top N| ReRank[Cross-Encoder Re-Ranking]
     ReRank -->|Context| LLM[Google Gemini]
