@@ -18,12 +18,14 @@ from llama_index.core.vector_stores import (
     FilterOperator,
 )
 from llama_index.core import Settings
+from llama_index.core.postprocessor import MetadataReplacementPostProcessor
 from llama_index.core.postprocessor import SentenceTransformerRerank
 from llama_index.core.query_engine import SubQuestionQueryEngine
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from modules.utils import (
     load_index,
     normalize_sponsor,
+    get_sponsor_variations,
     LocalMetadataPostFilter,
     KeywordBoostingPostProcessor,
 )
@@ -148,6 +150,34 @@ def search_trials(
     )
     response = query_engine.query(query)
     
+    # --- Strict Keyword Filtering (Post-Retrieval) ---
+    # As requested, we incorporate the logic to prioritize/filter by Title/Condition match.
+    # We apply this to the retrieved nodes to ensure high precision.
+    if response.source_nodes:
+        q_term = query.lower()
+        strict_matches = []
+        loose_matches = []
+        
+        for node in response.source_nodes:
+            meta = node.metadata
+            title = meta.get("title", "").lower()
+            conditions = meta.get("condition", "").lower()
+            
+            # Check if query terms appear in Title or Conditions
+            # We use a simple heuristic: if the query is short (< 3 words), check for exact substring.
+            # If long, we skip this to avoid filtering out semantic matches.
+            if len(q_term.split()) <= 3 and (q_term in title or q_term in conditions):
+                strict_matches.append(node)
+            else:
+                loose_matches.append(node)
+        
+        # If we found strict matches, prioritize them!
+        if strict_matches:
+            print(f"🎯 Found {len(strict_matches)} strict keyword matches. Filtering out loose matches to align with Analytics.")
+            # We strictly filter to these matches to ensure the "Total Found" count is accurate/consistent.
+            response.source_nodes = strict_matches
+            # We discard loose_matches entirely when strict matches exist.
+    
     # --- Strategy 2: Hybrid Search (Fallback) ---
     # If strict search yields nothing (e.g. sponsor name didn't match exactly), 
     # fall back to Vector Search + Fuzzy Post-Filtering.
@@ -176,15 +206,12 @@ def search_trials(
     if not response.source_nodes:
         return "No matching studies found. Try broadening your search terms or filters."
 
-    # Calculate total potential matches before strict filtering
-    total_found = len(response.source_nodes)
-    
     # Filter by Relevance Score for display
     MIN_SCORE = 1.5
     relevant_nodes = [node for node in response.source_nodes if node.score > MIN_SCORE]
     
     # If strict filtering removes too much, show at least top 3 to be helpful
-    if len(relevant_nodes) < 3 and total_found > 0:
+    if len(relevant_nodes) < 3 and len(response.source_nodes) > 0:
         relevant_nodes = response.source_nodes[:3]
         
     display_limit = 20
@@ -203,24 +230,7 @@ def search_trials(
         )
         results.append(entry)
 
-    # Construct Message
-    header = f"Found {total_found} potential matches."
-    if len(relevant_nodes) < total_found:
-        header += f" Here are the {len(display_nodes)} most relevant ones (Score > {MIN_SCORE}):"
-    else:
-        header += f" Here are the top {len(display_nodes)}:"
-
-    output = f"{header}\n\n" + "\n\n".join(results)
-    
-    if total_found > len(display_nodes):
-        remaining = total_found - len(display_nodes)
-        footer = (
-            f"\n\n_(...and {remaining} more studies with lower relevance scores.)_\n"
-            f"💡 **Tip**: To narrow this down, try adding filters like Phase, Status, or specific inclusion criteria."
-        )
-        output += footer
-        
-    return output
+    return f"Found {len(results)} relevant studies:\n\n" + "\n\n".join(results)
 
 
 @langchain_tool("find_similar_studies")
@@ -350,6 +360,24 @@ def fetch_study_analytics_data(
 
         retriever = index.as_retriever(similarity_top_k=5000, filters=metadata_filters)
         nodes = retriever.retrieve(search_query)
+        
+        # --- Strict Keyword Filtering (Deterministic) ---
+        # As per user request and verification script:
+        # We strictly check if the query appears in Title or Conditions.
+        # This is crucial for accurate counting (e.g. "Multiple Myeloma" -> 7 studies vs 514).
+        if query.lower() != "overall":
+            q_term = query.lower()
+            filtered_nodes = []
+            for node in nodes:
+                meta = node.metadata
+                title = meta.get("title", "").lower()
+                conditions = meta.get("condition", "").lower() # Note: key is 'condition' in DB, not 'conditions'
+                
+                if q_term in title or q_term in conditions:
+                    filtered_nodes.append(node)
+            
+            print(f"📉 Strict Filter: {len(nodes)} -> {len(filtered_nodes)} nodes for '{query}'")
+            nodes = filtered_nodes
         
         data = [node.metadata for node in nodes]
 
