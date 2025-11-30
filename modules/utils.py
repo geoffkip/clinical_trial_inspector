@@ -20,22 +20,99 @@ from dotenv import load_dotenv
 
 # --- MONKEYPATCH START ---
 # Fix for AttributeError: 'LanceEmptyQueryBuilder' object has no attribute 'nprobes'
-# This happens when using filters without a vector query or on small datasets
+# AND Fix for SQL quoting bug in IN filters
 original_query = LanceDBVectorStore.query
 
 def patched_query(self, query, **kwargs):
     try:
         return original_query(self, query, **kwargs)
-    except AttributeError as e:
+    except Exception as e:
+        print(f"⚠️ LanceDB Query Error: {e}")
+        if hasattr(query, "filters"):
+            print(f"   Filters: {query.filters}")
+        
         if "nprobes" in str(e):
-            # Fallback: If nprobes fails (likely empty builder), return empty result or handle gracefully
-            # For now, we just return an empty list of nodes which is expected for empty queries
-            # But wait, query() returns a VectorStoreQueryResult
             from llama_index.core.vector_stores.types import VectorStoreQueryResult
             return VectorStoreQueryResult(nodes=[], similarities=[], ids=[])
         raise e
 
 LanceDBVectorStore.query = patched_query
+
+# Fix for SQL quoting in LanceDB filters (specifically for IN operator with strings)
+from llama_index.vector_stores.lancedb import base as lancedb_base
+from llama_index.core.vector_stores.types import FilterOperator
+
+original_to_lance_filter = lancedb_base._to_lance_filter
+
+def patched_to_lance_filter(standard_filters, metadata_keys):
+    # If standard_filters is None or empty, return None
+    if not standard_filters:
+        return None
+        
+    # We need to reimplement the logic because the original function is what's broken
+    # But we can't easily access the internal logic.
+    # However, we can try to intercept the result? No, it returns a string (SQL where clause).
+    
+    # Let's try to reimplement a robust version for IN operator
+    filters = []
+    for filter in standard_filters.filters:
+        key = filter.key
+        if metadata_keys and key not in metadata_keys:
+             continue
+        
+        # LanceDB stores metadata in a struct column named 'metadata'
+        # So we must prefix the key
+        lance_key = f"metadata.{key}"
+             
+        # Handle IN operator specifically to fix quoting
+        if filter.operator == FilterOperator.IN:
+            if isinstance(filter.value, list):
+                # Quote strings properly
+                values = []
+                for v in filter.value:
+                    if isinstance(v, str):
+                        values.append(f"'{v}'") # Single quotes for SQL
+                    else:
+                        values.append(str(v))
+                val_str = ", ".join(values)
+                filters.append(f"{lance_key} IN ({val_str})")
+                continue
+        
+        # Fallback to original logic for other operators (or we'd have to reimplement all)
+        # But we can't mix our string with the original function's result easily if we call it per filter.
+        # The original function iterates over ALL filters and joins them.
+        
+        # So we MUST reimplement the whole function or at least the loop.
+        # Basic implementation based on common LlamaIndex patterns:
+        op = filter.operator
+        val = filter.value
+        
+        if op == FilterOperator.EQ:
+            if isinstance(val, str):
+                filters.append(f"{lance_key} = '{val}'")
+            else:
+                filters.append(f"{lance_key} = {val}")
+        elif op == FilterOperator.GT:
+            filters.append(f"{lance_key} > {val}")
+        elif op == FilterOperator.LT:
+            filters.append(f"{lance_key} < {val}")
+        elif op == FilterOperator.GTE:
+            filters.append(f"{lance_key} >= {val}")
+        elif op == FilterOperator.LTE:
+            filters.append(f"{lance_key} <= {val}")
+        elif op == FilterOperator.NE:
+            if isinstance(val, str):
+                filters.append(f"{lance_key} != '{val}'")
+            else:
+                filters.append(f"{lance_key} != {val}")
+        # Add other operators as needed
+        
+    if not filters:
+        return None
+        
+    return " AND ".join(filters)
+
+lancedb_base._to_lance_filter = patched_to_lance_filter
 # --- MONKEYPATCH END ---
 
 
@@ -91,13 +168,24 @@ def load_index() -> VectorStoreIndex:
     db_path = "./ct_gov_lancedb"
     db = lancedb.connect(db_path)
 
+    # Define metadata keys explicitly to ensure filters work
+    # This prevents the "NoneType is not iterable" error in _to_lance_filter
+    metadata_keys = [
+        "nct_id", "title", "org", "sponsor", "status", "phase", 
+        "study_type", "start_year", "condition", "intervention", 
+        "country", "state"
+    ]
+
     # Create the vector store wrapper
-    # mode="read" ensures we don't accidentally overwrite or create new tables here
     vector_store = LanceDBVectorStore(
         uri=db_path, 
         table_name="clinical_trials",
         query_mode="hybrid",
     )
+    
+    # Manually set metadata keys since the constructor doesn't accept them
+    # and automatic inference might fail on read-only/empty connections
+    vector_store._metadata_keys = metadata_keys
 
     # Create storage context
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
