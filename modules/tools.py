@@ -151,7 +151,7 @@ def search_trials(
     response = query_engine.query(query)
     
     # --- Strict Keyword Filtering (Post-Retrieval) ---
-    # As requested, we incorporate the logic to prioritize/filter by Title/Condition match.
+    # Logic to prioritize/filter by Title/Condition match.
     # We apply this to the retrieved nodes to ensure high precision.
     if response.source_nodes:
         q_term = query.lower()
@@ -362,7 +362,6 @@ def fetch_study_analytics_data(
         nodes = retriever.retrieve(search_query)
         
         # --- Strict Keyword Filtering (Deterministic) ---
-        # As per user request and verification script:
         # We strictly check if the query appears in Title or Conditions.
         # This is crucial for accurate counting (e.g. "Multiple Myeloma" -> 7 studies vs 514).
         if query.lower() != "overall":
