@@ -10,7 +10,8 @@ Built with **LangChain**, **LlamaIndex**, **Streamlit**, **Altair**, **Streamlit
 *   **Hybrid Search**: Combines **Semantic Search** (vector similarity) with **Keyword Boosting** (BM25-style) to find studies that match both the *meaning* and the *specific terms* of your query.
 *   **Smart Filtering**:
     *   **Strict Pre-Filtering**: For specific sponsors (e.g., "Pfizer"), it forces the engine to look *only* at that sponsor's studies first, ensuring 100% recall.
-*   **Smart Summary**: For broad queries (e.g., "Show me all Pfizer studies"), it reports the total count (e.g., "Found 50 potential matches") and lists the top 20 most relevant ones, keeping the chat concise.
+    *   **Strict Keyword Filtering**: Prioritizes studies where the query explicitly appears in the **Title** or **Conditions**, ensuring high precision for counting questions.
+*   **Smart Summary**: Returns a clean, concise list of relevant studies (no hidden counts or "potential matches").
 *   **Query Expansion**: Automatically expands your search terms with medical synonyms (e.g., "Heart Attack" -> "Myocardial Infarction").
 *   **Re-Ranking**: Uses a Cross-Encoder (`ms-marco-MiniLM`) to re-score results for maximum relevance.
 *   **Query Decomposition**: Breaks down complex multi-part questions (e.g., *"Compare the primary outcomes of Keytruda vs Opdivo"*) into sub-questions for precise answers.
@@ -180,6 +181,7 @@ streamlit run ct_agent_app.py
 ## 🧪 Testing & Quality
 
 - **Unit Tests**: Run `python -m pytest tests/test_unit.py` to verify core logic.
+- **Data Integrity**: Run `python -m unittest tests/test_data_integrity.py` to verify database content against known ground truths.
 - **Linting**: Codebase is formatted with `black` and linted with `flake8`.
 
 ## 📂 Project Structure
