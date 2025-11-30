@@ -193,6 +193,7 @@ streamlit run ct_agent_app.py
 - `ct_agent_app.py`: Main application logic.
 - `modules/`:
     - `utils.py`: Configuration, Normalization, Custom Filters.
+    - `constants.py`: Static data (Coordinates, Mappings).
     - `tools.py`: Tool definitions (`search_trials`, `compare_studies`, etc.).
     - `graph_viz.py`: Knowledge Graph logic.
 - `scripts/`:
