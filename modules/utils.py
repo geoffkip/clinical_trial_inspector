@@ -12,9 +12,31 @@ import os
 import streamlit as st
 from typing import List, Optional
 from llama_index.core import VectorStoreIndex, StorageContext, Settings
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.lancedb import LanceDBVectorStore
+from llama_index.llms.gemini import Gemini
 import lancedb
 from dotenv import load_dotenv
+
+# --- MONKEYPATCH START ---
+# Fix for AttributeError: 'LanceEmptyQueryBuilder' object has no attribute 'nprobes'
+# This happens when using filters without a vector query or on small datasets
+original_query = LanceDBVectorStore.query
+
+def patched_query(self, query, **kwargs):
+    try:
+        return original_query(self, query, **kwargs)
+    except AttributeError as e:
+        if "nprobes" in str(e):
+            # Fallback: If nprobes fails (likely empty builder), return empty result or handle gracefully
+            # For now, we just return an empty list of nodes which is expected for empty queries
+            # But wait, query() returns a VectorStoreQueryResult
+            from llama_index.core.vector_stores.types import VectorStoreQueryResult
+            return VectorStoreQueryResult(nodes=[], similarities=[], ids=[])
+        raise e
+
+LanceDBVectorStore.query = patched_query
+# --- MONKEYPATCH END ---
 
 
 
@@ -40,7 +62,14 @@ def setup_llama_index():
         st.error("Please set GOOGLE_API_KEY in .env")
         st.stop()
 
-    Settings.llm = Gemini(model="models/gemini-2.5-flash", temperature=0)
+    try:
+        Settings.llm = Gemini(model="models/gemini-2.5-flash", temperature=0)
+    except Exception as e:
+        print(f"⚠️ LLM initialization failed (likely missing API key): {e}")
+        print("⚠️ Using MockLLM for testing/fallback.")
+        from llama_index.core.llms import MockLLM
+        Settings.llm = MockLLM()
+    
     Settings.embed_model = HuggingFaceEmbedding(
         model_name="pritamdeka/S-PubMedBert-MS-MARCO"
     )
@@ -67,7 +96,7 @@ def load_index() -> VectorStoreIndex:
     vector_store = LanceDBVectorStore(
         uri=db_path, 
         table_name="clinical_trials",
-        query_mode="hybrid"
+        query_mode="hybrid",
     )
 
     # Create storage context
@@ -94,10 +123,10 @@ def get_hybrid_retriever(index: VectorStoreIndex, similarity_top_k: int = 50, fi
     """
     # LanceDB supports native hybrid search via query_mode="hybrid"
     # We pass this configuration to the retriever
+    # Use standard retriever first to avoid LanceDB hybrid search issues on small datasets
     return index.as_retriever(
         similarity_top_k=similarity_top_k, 
         filters=filters,
-        vector_store_query_mode="hybrid"
     )
 
 

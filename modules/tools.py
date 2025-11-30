@@ -64,6 +64,11 @@ def expand_query(query: str) -> str:
         # Clean up if LLM is chatty
         if "Expanded Query:" in expanded:
             expanded = expanded.split("Expanded Query:")[-1].strip()
+            
+        if not expanded:
+            print(f"⚠️ Expansion returned empty. Using original query.")
+            return query
+            
         print(f"✨ Expanded Query: '{query}' -> '{expanded}'")
         return expanded
     except Exception as e:
@@ -135,7 +140,8 @@ def search_trials(
         variations = get_sponsor_variations(sponsor)
         if variations:
             print(f"🎯 Applying strict pre-filter for sponsor '{sponsor}' ({len(variations)} variants)")
-            pre_filters.append(MetadataFilter(key="org", value=variations, operator=FilterOperator.IN))
+            # Use 'sponsor' field which is the Lead Sponsor
+            pre_filters.append(MetadataFilter(key="sponsor", value=variations, operator=FilterOperator.IN))
         else:
             print(f"⚠️ No strict mapping for sponsor '{sponsor}'. Will rely on fuzzy post-filtering.")
 
@@ -187,13 +193,17 @@ def search_trials(
             # Check if the sponsor matches one of the variations OR fuzzy match
             # If strict variations exist, enforce them.
             variations = get_sponsor_variations(sponsor)
-            node_org = meta.get("org", "")
+            node_sponsor = meta.get("sponsor", "")
+            # Fallback to org if sponsor is missing (legacy data)
+            if not node_sponsor:
+                node_sponsor = meta.get("org", "")
+                
             if variations:
-                if node_org not in variations:
+                if node_sponsor not in variations:
                     keep = False
             else:
                 # Fuzzy fallback
-                if normalize_sponsor(sponsor).lower() not in normalize_sponsor(node_org).lower():
+                if normalize_sponsor(sponsor).lower() not in normalize_sponsor(node_sponsor).lower():
                     keep = False
         
         if keep:
@@ -240,7 +250,7 @@ def search_trials(
             f"   - ID: {meta.get('nct_id')}\n"
             f"   - Phase: {meta.get('phase', 'N/A')}\n"
             f"   - Status: {meta.get('status', 'N/A')}\n"
-            f"   - Sponsor: {meta.get('org', 'Unknown')}\n"
+            f"   - Sponsor: {meta.get('sponsor', meta.get('org', 'Unknown'))}\n"
             f"   - Relevance: {node.score:.2f}"
         )
         results.append(entry)
@@ -379,7 +389,7 @@ def fetch_study_analytics_data(
                 print(f"🎯 Using strict pre-filter for sponsor '{sponsor}': {len(sponsor_variations)} variations found.")
                 filters.append(
                     MetadataFilter(
-                        key="org", value=sponsor_variations, operator=FilterOperator.IN
+                        key="sponsor", value=sponsor_variations, operator=FilterOperator.IN
                     )
                 )
 
