@@ -11,7 +11,7 @@ Built with **LangChain**, **LlamaIndex**, **Streamlit**, **Altair**, **Streamlit
 *   **Smart Filtering**:
     *   **Strict Pre-Filtering**: For specific sponsors (e.g., "Pfizer"), it forces the engine to look *only* at that sponsor's studies first, ensuring 100% recall.
     *   **Strict Keyword Filtering**: Prioritizes studies where the query explicitly appears in the **Title** or **Conditions**, ensuring high precision for counting questions.
-*   **Smart Summary**: Returns a clean, concise list of relevant studies (no hidden counts or "potential matches").
+*   **Smart Summary**: Returns a clean, concise list of relevant studies.
 *   **Query Expansion**: Automatically expands your search terms with medical synonyms (e.g., "Heart Attack" -> "Myocardial Infarction").
 *   **Re-Ranking**: Uses a Cross-Encoder (`ms-marco-MiniLM`) to re-score results for maximum relevance.
 *   **Query Decomposition**: Breaks down complex multi-part questions (e.g., *"Compare the primary outcomes of Keytruda vs Opdivo"*) into sub-questions for precise answers.
