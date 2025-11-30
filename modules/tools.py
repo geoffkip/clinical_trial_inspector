@@ -378,15 +378,31 @@ def fetch_study_analytics_data(
         
         # --- Strict Keyword Filtering ---
         # Strictly check if the query appears in Title or Conditions to ensure accurate counting.
+        # EXCEPTION: If the query matches the requested sponsor, we also check the 'org' field.
         if query.lower() != "overall":
             q_term = query.lower()
+            
+            # Check if the query is essentially the sponsor name
+            is_sponsor_query = False
+            if sponsor:
+                # Normalize both to see if they refer to the same entity
+                norm_query = normalize_sponsor(query)
+                norm_sponsor = normalize_sponsor(sponsor)
+                
+                if norm_query and norm_sponsor and norm_query.lower() == norm_sponsor.lower():
+                    is_sponsor_query = True
+                elif sponsor.lower() in query.lower() or query.lower() in sponsor.lower():
+                    is_sponsor_query = True
+            
             filtered_nodes = []
             for node in nodes:
                 meta = node.metadata
                 title = meta.get("title", "").lower()
-                conditions = meta.get("condition", "").lower() # Note: key is 'condition' in DB, not 'conditions'
+                conditions = meta.get("condition", "").lower() # Note: key is 'condition' in DB
+                org = meta.get("org", "").lower()
                 
-                if q_term in title or q_term in conditions:
+                # If it's a sponsor query, we allow matches on the Organization field too
+                if q_term in title or q_term in conditions or (is_sponsor_query and q_term in org):
                     filtered_nodes.append(node)
             
             print(f"📉 Strict Filter: {len(nodes)} -> {len(filtered_nodes)} nodes for '{query}'")
