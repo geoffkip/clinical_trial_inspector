@@ -435,43 +435,4 @@ class LocalMetadataPostFilter(BaseNodePostprocessor):
         return new_nodes
 
 
-class KeywordBoostingPostProcessor(BaseNodePostprocessor):
-    """
-    Boosts the score of nodes that contain exact keyword matches in the Title or NCT ID.
-    This mimics BM25 behavior by rewarding exact surface form matches.
-    """
 
-    def postprocess_nodes(
-        self, nodes: List[NodeWithScore], query_bundle=None
-    ) -> List[NodeWithScore]:
-        return self._postprocess_nodes(nodes, query_bundle)
-
-    def _postprocess_nodes(
-        self, nodes: List[NodeWithScore], query_bundle=None
-    ) -> List[NodeWithScore]:
-        if not query_bundle:
-            return nodes
-
-        query_terms = [t.lower() for t in query_bundle.query_str.split() if len(t) > 3]
-
-        for node in nodes:
-            metadata = node.node.metadata
-            title = str(metadata.get("title", "")).lower()
-            nct_id = str(metadata.get("nct_id", "")).lower()
-
-            # Simple boosting logic
-            for term in query_terms:
-                if term in title:
-                    node.score *= 1.1  # 10% boost for title match
-                if term in nct_id:
-                    node.score *= 1.5  # 50% boost for ID match
-
-        # Re-sort by new score
-        nodes.sort(key=lambda x: x.score, reverse=True)
-        return nodes
-
-    def __call__(
-        self, nodes: List[NodeWithScore], query_bundle=None
-    ) -> List[NodeWithScore]:
-        """Callable interface for LlamaIndex post-processors."""
-        return self._postprocess_nodes(nodes, query_bundle)

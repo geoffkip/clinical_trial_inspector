@@ -27,7 +27,6 @@ from modules.utils import (
     normalize_sponsor,
     get_sponsor_variations,
     LocalMetadataPostFilter,
-    KeywordBoostingPostProcessor,
     get_hybrid_retriever,
 )
 import re
