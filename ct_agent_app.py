@@ -104,9 +104,13 @@ index = load_index()
 
 
 # 3. Define Agent (Cached)
+# 3. Define Agent (Cached)
 @st.cache_resource
-def get_agent():
-    """Initializes and caches the LangChain agent."""
+def get_agent(api_key: str):
+    """Initializes and caches the LangChain agent. Keyed by API key."""
+    # Create LLM specific to this key (and cache entry)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0, google_api_key=api_key)
+
     tools = [
         search_trials,
         find_similar_studies,
@@ -147,7 +151,7 @@ def get_agent():
     return AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 
-agent_executor = get_agent()
+agent_executor = get_agent(api_key=api_key)
 
 # --- Sidebar ---
 with st.sidebar:
