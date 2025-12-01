@@ -6,6 +6,7 @@ colorTo: indigo
 sdk: docker
 pinned: false
 app_port: 8501
+app_file: ct_agent_app.py
 ---
 
 # Clinical Trial Inspector Agent 🕵️‍♂️💊
