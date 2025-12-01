@@ -136,7 +136,7 @@ def load_index() -> VectorStoreIndex:
     """
     Loads and caches the persistent LanceDB index.
     """
-    setup_llama_index()
+    # setup_llama_index()  <-- REMOVED: App handles setup. Calling here resets LLM if env var is missing.
     
     # Initialize LanceDB
     db_path = "./ct_gov_lancedb"
