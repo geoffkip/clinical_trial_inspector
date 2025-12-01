@@ -588,7 +588,7 @@ def get_study_analytics(
 
     Args:
         query (str): The search query to filter studies (e.g., "cancer").
-        group_by (str): The field to group by. Options: "phase", "status", "sponsor", "start_year", "condition".
+        group_by (str): The field to group by. Options: "phase", "status", "sponsor", "start_year", "condition", "intervention", "country", "state".
         phase (Optional[str]): Optional filter for phase (e.g., "PHASE2").
         status (Optional[str]): Optional filter for status (e.g., "RECRUITING").
         sponsor (Optional[str]): Optional filter for sponsor (e.g., "Pfizer").
