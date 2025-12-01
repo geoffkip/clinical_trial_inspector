@@ -11,8 +11,20 @@ from llama_index.core import VectorStoreIndex, StorageContext, Settings
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.lancedb import LanceDBVectorStore
 from llama_index.llms.gemini import Gemini
+from llama_index.core.postprocessor import SentenceTransformerRerank
 import lancedb
 from dotenv import load_dotenv
+
+@st.cache_resource
+def get_reranker(top_n: int = 50):
+    """
+    Loads and caches the Reranker model.
+    """
+    print("🔄 Loading Reranker Model (Cached)...")
+    return SentenceTransformerRerank(
+        model="cross-encoder/ms-marco-MiniLM-L-12-v2", 
+        top_n=top_n
+    )
 
 # --- MONKEYPATCH START ---
 # Patch LanceDBVectorStore to handle 'nprobes' AttributeError and fix SQL quoting for IN filters.

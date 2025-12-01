@@ -27,6 +27,7 @@ from modules.utils import (
     normalize_sponsor,
     get_sponsor_variations,
     get_hybrid_retriever,
+    get_reranker,  # Import cached reranker
 )
 import re
 import traceback
@@ -102,7 +103,7 @@ def search_trials(
     index = load_index()
     
     # Constants
-    TOP_K_STRICT = 500  # High recall for pre-filtered search
+    TOP_K_STRICT = 200  # Reduced from 500 for performance
     
     # --- Query Construction ---
     if not query:
@@ -148,7 +149,8 @@ def search_trials(
     metadata_filters = MetadataFilters(filters=pre_filters) if pre_filters else None
     
     # Post-processors (Reranking)
-    reranker = SentenceTransformerRerank(model="cross-encoder/ms-marco-MiniLM-L-12-v2", top_n=50)
+    # Use cached reranker
+    reranker = get_reranker(top_n=50)
     
     # --- HYBRID SEARCH IMPLEMENTATION ---
     # Combine Vector + BM25 using get_hybrid_retriever
