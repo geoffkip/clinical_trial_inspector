@@ -413,7 +413,15 @@ def fetch_study_analytics_data(
             q_term = query.lower()
             
             # Check if the query is essentially the sponsor name
+            # Check if the query is essentially the sponsor name
             is_sponsor_query = False
+            
+            # Check if the query itself normalizes to a known sponsor
+            query_normalized = normalize_sponsor(query)
+            if query_normalized and query_normalized != query:
+                 # If normalization changed it (or found a mapping), it's likely a sponsor
+                 is_sponsor_query = True
+            
             if sponsor:
                 # Normalize both to see if they refer to the same entity
                 norm_query = normalize_sponsor(query)
@@ -433,7 +441,28 @@ def fetch_study_analytics_data(
                 sponsor_val = meta.get("sponsor", "").lower()
                 
                 # If it's a sponsor query, we allow matches on the Organization OR Sponsor field
-                if q_term in title or q_term in conditions or (is_sponsor_query and (q_term in org or q_term in sponsor_val)):
+                # AND we check if the normalized values match (handling aliases like J&J -> Janssen)
+                match = False
+                if q_term in title or q_term in conditions:
+                    match = True
+                elif is_sponsor_query:
+                    # Check raw match
+                    if q_term in org or q_term in sponsor_val:
+                        match = True
+                    else:
+                        # Check normalized match
+                        norm_org = normalize_sponsor(org)
+                        norm_val = normalize_sponsor(sponsor_val)
+                        
+                        # Compare against the normalized query (which is the sponsor in this case)
+                        target_norm = norm_sponsor if sponsor else query_normalized
+                        
+                        if norm_org and target_norm and norm_org.lower() == target_norm.lower():
+                            match = True
+                        elif norm_val and target_norm and norm_val.lower() == target_norm.lower():
+                            match = True
+                            
+                if match:
                     filtered_nodes.append(node)
             
             print(f"📉 Strict Filter: {len(nodes)} -> {len(filtered_nodes)} nodes for '{query}'")
