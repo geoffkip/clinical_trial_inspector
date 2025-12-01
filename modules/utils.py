@@ -219,12 +219,52 @@ def get_hybrid_retriever(index: VectorStoreIndex, similarity_top_k: int = 50, fi
 
 
 # --- Normalization ---
+
+# Centralized Sponsor Mappings
+# Key: Canonical Name
+# Value: List of variations/aliases (including the canonical name itself if needed for matching)
+SPONSOR_MAPPINGS = {
+    "GlaxoSmithKline": [
+        "gsk", "glaxo", "glaxosmithkline", "glaxosmithkline", 
+        "GlaxoSmithKline"
+    ],
+    "Janssen": [
+        "j&j", "johnson & johnson", "johnson and johnson", "janssen", "Janssen",
+        "Janssen Research & Development, LLC",
+        "Janssen Vaccines & Prevention B.V.",
+        "Janssen Pharmaceutical K.K.",
+        "Janssen-Cilag International NV",
+        "Janssen Sciences Ireland UC",
+        "Janssen Pharmaceutica N.V., Belgium",
+        "Janssen Scientific Affairs, LLC",
+        "Janssen-Cilag Ltd.",
+        "Xian-Janssen Pharmaceutical Ltd.",
+        "Janssen Korea, Ltd., Korea",
+        "Janssen-Cilag G.m.b.H",
+        "Janssen-Cilag, S.A.",
+        "Janssen BioPharma, Inc.",
+    ],
+    "Bristol-Myers Squibb": [
+        "bms", "bristol", "bristol myers squibb", "bristol-myers squibb",
+        "Bristol-Myers Squibb"
+    ],
+    "Merck Sharp & Dohme": [
+        "merck", "msd", "merck sharp & dohme", 
+        "Merck Sharp & Dohme LLC"
+    ],
+    "Pfizer": ["pfizer", "Pfizer", "Pfizer Inc."],
+    "AstraZeneca": ["astrazeneca", "AstraZeneca"],
+    "Eli Lilly and Company": ["lilly", "eli lilly", "Eli Lilly and Company"],
+    "Sanofi": ["sanofi", "Sanofi"],
+    "Novartis": ["novartis", "Novartis"],
+}
+
 def normalize_sponsor(sponsor: str) -> Optional[str]:
     """
     Normalizes sponsor names to handle common aliases and variations.
-
-    This is crucial for accurate filtering and aggregation, as sponsor names
-    in the raw data can vary (e.g., "Merck", "MSD", "Merck Sharp & Dohme").
+    
+    Uses SPONSOR_MAPPINGS to map aliases (e.g., "J&J") and specific variations 
+    (e.g., "Janssen Research & Development, LLC") to the canonical name ("Janssen").
 
     Args:
         sponsor (str): The raw sponsor name.
@@ -236,24 +276,35 @@ def normalize_sponsor(sponsor: str) -> Optional[str]:
         return None
 
     s = sponsor.lower().strip()
-    # Mapping of common aliases to canonical names
-    aliases = {
-        "gsk": "GlaxoSmithKline",
-        "glaxo": "GlaxoSmithKline",
-        "glaxosmithkline": "GlaxoSmithKline",
-        "j&j": "Janssen",
-        "johnson & johnson": "Janssen",
-        "johnson and johnson": "Janssen",
-        "janssen": "Janssen",
-        "bms": "Bristol-Myers Squibb",
-        "bristol myers squibb": "Bristol-Myers Squibb",
-        "merck": "Merck Sharp & Dohme",
-        "msd": "Merck Sharp & Dohme",
-    }
-
-    for alias, canonical in aliases.items():
-        if alias in s:
+    
+    for canonical, variations in SPONSOR_MAPPINGS.items():
+        # Check if input matches canonical name (case-insensitive)
+        if s == canonical.lower():
             return canonical
+            
+        # Check if input matches any variation (substring or exact match?)
+        # For aliases like "gsk", substring match is risky (e.g. "gsk" in "gskill").
+        # But for "Janssen Research...", we want to map it to "Janssen".
+        
+        # Strategy:
+        # 1. Check exact match against variations
+        # 2. Check if alias is a substring of input (for short aliases like "gsk")
+        
+        for v in variations:
+            v_lower = v.lower()
+            if v_lower == s:
+                return canonical
+            # If the variation is a known alias (like 'gsk'), check if it's in the string
+            if len(v) < 5 and v_lower in s: 
+                 return canonical
+            # If the input is a variation (e.g. input="Janssen Research...", variation="Janssen Research...")
+            # This is covered by exact match above.
+            
+            # What if input is "Janssen Research" and variation is "Janssen Research & Development"?
+            # We might want to check if canonical is in the input?
+            if canonical.lower() in s:
+                return canonical
+
     return sponsor
 
 
@@ -265,60 +316,20 @@ def get_sponsor_variations(sponsor: str) -> Optional[List[str]]:
     if not sponsor:
         return None
 
-    s = sponsor.lower().strip()
-
-    # Hardcoded mapping based on DB analysis
-    # This can be expanded or moved to a config file/DB later
-    mappings = {
-        "pfizer": ["Pfizer"],
-        "janssen": [
-            "Janssen Research & Development, LLC",
-            "Janssen Vaccines & Prevention B.V.",
-            "Janssen Pharmaceutical K.K.",
-            "Janssen-Cilag International NV",
-            "Janssen Sciences Ireland UC",
-            "Janssen Pharmaceutica N.V., Belgium",
-            "Janssen Scientific Affairs, LLC",
-            "Janssen-Cilag Ltd.",
-            "Xian-Janssen Pharmaceutical Ltd.",
-            "Janssen Korea, Ltd., Korea",
-            "Janssen-Cilag G.m.b.H",
-            "Janssen-Cilag, S.A.",
-            "Janssen BioPharma, Inc.",
-        ],
-        "j&j": [
-            "Janssen Research & Development, LLC",
-            "Janssen Vaccines & Prevention B.V.",
-            "Janssen Pharmaceutical K.K.",
-            "Janssen-Cilag International NV",
-            "Janssen Sciences Ireland UC",
-            "Janssen Pharmaceutica N.V., Belgium",
-            "Janssen Scientific Affairs, LLC",
-            "Janssen-Cilag Ltd.",
-            "Xian-Janssen Pharmaceutical Ltd.",
-            "Janssen Korea, Ltd., Korea",
-            "Janssen-Cilag G.m.b.H",
-            "Janssen-Cilag, S.A.",
-            "Janssen BioPharma, Inc.",
-        ],
-        "merck": ["Merck Sharp & Dohme LLC"],  # Based on analyze_db output
-        "msd": ["Merck Sharp & Dohme LLC"],
-        "astrazeneca": ["AstraZeneca"],
-        "lilly": ["Eli Lilly and Company"],
-        "eli lilly": ["Eli Lilly and Company"],
-        "bms": ["Bristol-Myers Squibb"],
-        "bristol": ["Bristol-Myers Squibb"],
-        "bristol myers squibb": ["Bristol-Myers Squibb"],
-        "sanofi": ["Sanofi"],
-        "novartis": ["Novartis"],
-        "gsk": ["GlaxoSmithKline"],
-        "glaxo": ["GlaxoSmithKline"],
-    }
-
-    for key, variations in mappings.items():
-        if key in s:
-            return variations
-
+    # First, normalize the input to get the canonical name
+    canonical = normalize_sponsor(sponsor)
+    
+    # If we have a mapping for this canonical name, return the variations
+    # BUT, we only want the "official" DB variations, not the short aliases (like "gsk").
+    # The original logic had specific lists for DB values.
+    # We should probably separate "Aliases" from "DB Values" in the mapping if we want to be precise.
+    # Or just return all of them? 
+    # If we return "gsk" in the IN clause, it won't match anything in the DB (which has full names), 
+    # but it doesn't hurt.
+    
+    if canonical in SPONSOR_MAPPINGS:
+        return SPONSOR_MAPPINGS[canonical]
+        
     return None
 
 
