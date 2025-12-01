@@ -9,6 +9,8 @@ lark
 langchain-huggingface
 llama-index
 llama-index-vector-stores-lancedb
+ragas
+datasets
 llama-index-embeddings-huggingface
 llama-index-llms-gemini
 streamlit-option-menu

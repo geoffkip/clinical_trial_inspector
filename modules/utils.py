@@ -132,15 +132,33 @@ def setup_llama_index(api_key: Optional[str] = None):
 
 
 @st.cache_resource
-def load_index() -> VectorStoreIndex:
+def load_index(persist_dir: str = "./ct_gov_lancedb") -> VectorStoreIndex:
     """
-    Loads and caches the persistent LanceDB index.
+    Loads the LanceDB index. Supports both local and cloud instances.
+    Prioritizes LANCEDB_URI environment variable if set.
     """
     setup_llama_index()
     
-    # Initialize LanceDB
-    db_path = "./ct_gov_lancedb"
-    db = lancedb.connect(db_path)
+    table_name = "clinical_trials"
+    
+    # Check for Cloud URI
+    uri = os.environ.get("LANCEDB_URI")
+    api_key = os.environ.get("LANCEDB_API_KEY")
+    
+    if uri and uri.startswith("db://"):
+        print(f"☁️ Connecting to LanceDB Cloud: {uri}")
+        vector_store = LanceDBVectorStore(
+            uri=uri, 
+            api_key=api_key,
+            table_name=table_name,
+        )
+    else:
+        # Use provided persist_dir or default
+        print(f"📂 Connecting to Local LanceDB: {persist_dir}")
+        vector_store = LanceDBVectorStore(
+            uri=persist_dir, 
+            table_name=table_name
+        )
 
     # Define metadata keys explicitly to ensure filters work
     metadata_keys = [
@@ -148,13 +166,9 @@ def load_index() -> VectorStoreIndex:
         "study_type", "start_year", "condition", "intervention", 
         "country", "state"
     ]
-
-    # Create the vector store wrapper
-    vector_store = LanceDBVectorStore(
-        uri=db_path, 
-        table_name="clinical_trials",
-        query_mode="hybrid",
-    )
+    
+    # Manually set metadata keys as constructor doesn't accept them
+    vector_store._metadata_keys = metadata_keys
     
     # Manually set metadata keys as constructor doesn't accept them
     vector_store._metadata_keys = metadata_keys
