@@ -363,7 +363,7 @@ if page == "Analytics Dashboard":
                     .interactive()
                 )
 
-            st.altair_chart(chart, theme="streamlit", width="stretch")
+            st.altair_chart(chart, theme="streamlit", use_container_width=True)
 
             # Show raw table
             with st.expander("View Source Data"):
