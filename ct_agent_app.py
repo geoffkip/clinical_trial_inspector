@@ -579,6 +579,6 @@ if page == "Raw Data":
                 ),  # Force text to avoid commas
                 "url": st.column_config.LinkColumn("URL"),
             },
-            width="stretch",
+            use_container_width=True,
             hide_index=True,
         )
