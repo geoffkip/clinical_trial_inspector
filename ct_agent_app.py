@@ -22,7 +22,13 @@ logging.getLogger("langchain_google_genai._function_utils").setLevel(logging.ERR
 load_dotenv()
 
 # Module Imports
-from modules.utils import load_index, setup_llama_index
+from modules.utils import (
+    load_environment,
+    load_index,
+    setup_llama_index,
+    init_embedding_model,
+    get_hybrid_retriever,
+)
 from modules.constants import COUNTRY_COORDINATES, STATE_COORDINATES
 
 # ... (imports)
@@ -67,6 +73,9 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+# Initialize global resources (Embeddings) once
+init_embedding_model()
 
 st.title("🧬 Clinical Trial Inspector Agent")
 

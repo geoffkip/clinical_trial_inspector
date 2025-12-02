@@ -118,29 +118,35 @@ def load_environment():
 
 
 # --- Configuration ---
+@st.cache_resource
+def init_embedding_model():
+    """Initializes and caches the embedding model globally."""
+    Settings.embed_model = HuggingFaceEmbedding(
+        model_name="pritamdeka/S-PubMedBert-MS-MARCO",
+        device="cpu"
+    )
+
 def setup_llama_index(api_key: Optional[str] = None):
     """
-    Configures global LlamaIndex settings (LLM and Embeddings).
+    Configures global LlamaIndex settings (LLM).
+    Embedding model is handled by init_embedding_model().
     """
+    # Ensure embedding model is loaded
+    init_embedding_model()
+
     # Use passed key, or fallback to env var
     final_key = api_key or os.environ.get("GOOGLE_API_KEY")
 
     if not final_key:
-        # App handles prompting for key, so we just return or log warning
-        pass
+        return
 
     try:
         # Pass the key explicitly if available
         Settings.llm = Gemini(model="models/gemini-2.5-flash", temperature=0, api_key=final_key)
     except Exception as e:
-        print(f"⚠️ LLM initialization failed (likely missing API key): {e}")
-        print("⚠️ Using MockLLM for testing/fallback.")
+        print(f"⚠️ LLM initialization failed: {e}")
         from llama_index.core.llms import MockLLM
         Settings.llm = MockLLM()
-    
-    Settings.embed_model = HuggingFaceEmbedding(
-        model_name="pritamdeka/S-PubMedBert-MS-MARCO"
-    )
 
 
 @st.cache_resource
