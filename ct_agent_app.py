@@ -230,7 +230,7 @@ if page == "Chat Assistant":
                     )
                     .interactive()
                 )
-                st.altair_chart(chart, theme="streamlit", width="stretch")
+                st.altair_chart(chart, theme="streamlit", use_container_width=True)
 
     # Chat Input
     if prompt := st.chat_input("Ask about clinical trials..."):
@@ -281,7 +281,7 @@ if page == "Chat Assistant":
                                 )
                                 .interactive()
                             )
-                            st.altair_chart(chart, theme="streamlit", width="stretch")
+                            st.altair_chart(chart, theme="streamlit", use_container_width=True)
 
                         # Clean up session state
                         del st.session_state["inline_chart_data"]
